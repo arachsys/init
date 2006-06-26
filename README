@@ -1,0 +1,4 @@
+This is a lightweight BSD-style init used in Arachsys Linux.
+
+run-init.c is a slightly modified version of run_init by H. Peter Anvin,
+also released under the terms of the MIT license.

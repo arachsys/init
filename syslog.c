@@ -71,6 +71,7 @@ size_t kernel_read(int fd, char *data, size_t *length, size_t size) {
     *length = kernel_print(data);
   }
 
+  fflush(stdout);
   return new;
 }
 
@@ -134,6 +135,7 @@ void syslog_recv(int fd, char *data, size_t size) {
           date.tm_year + 1900, date.tm_mon + 1, date.tm_mday, date.tm_hour,
           date.tm_min, date.tm_sec, cursor);
   }
+  fflush(stdout);
 }
 
 int main(void) {

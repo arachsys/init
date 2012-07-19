@@ -7,7 +7,7 @@ CFLAGS = -Os -Wall -pedantic -std=gnu99
 LDFLAGS =
 
 SCRIPTS = halt poweroff reboot single syslogd
-BINARIES = daemon fsync init run-init syslog
+BINARIES = daemon fsync init syslog
 
 all: ${SCRIPTS} ${BINARIES}
 

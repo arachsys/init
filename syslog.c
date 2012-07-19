@@ -5,6 +5,7 @@
 #include <error.h>
 #include <fcntl.h>
 #include <poll.h>
+#include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -31,6 +32,33 @@
 #ifndef UTC
 #define UTC 1
 #endif
+
+void handler_run(char **argv) {
+  int logpipe[2];
+
+  if (pipe(logpipe) < 0)
+    error(EXIT_FAILURE, errno, "pipe");
+
+  signal(SIGCHLD, SIG_IGN);
+  switch (fork()) {
+    case -1:
+      error(EXIT_FAILURE, errno, "fork");
+    case 0:
+      if (dup2(logpipe[0], STDIN_FILENO) < 0)
+        error(EXIT_FAILURE, errno, "dup2");
+      close(logpipe[0]);
+      close(logpipe[1]);
+      execvp(argv[0], argv);
+      error(EXIT_FAILURE, errno, "exec");
+  }
+
+  if (dup2(logpipe[1], STDOUT_FILENO) < 0)
+    error(EXIT_FAILURE, errno, "dup2");
+  close(logpipe[0]);
+  close(logpipe[1]);
+  argv[0] = NULL;
+  return;
+}
 
 int kernel_print(char *line) {
   int level, start;
@@ -138,7 +166,7 @@ void syslog_recv(int fd, char *data, size_t size) {
   fflush(stdout);
 }
 
-int main(void) {
+int main(int argc, char **argv) {
   struct pollfd fds[2];
   struct sockaddr_un addr;
 
@@ -151,6 +179,9 @@ int main(void) {
     char *data;
     size_t size;
   } syslog;
+
+  if (argc > 1)
+    handler_run(argv + 1);
 
   if (!(kernel.data = malloc(kernel.size = BUFFER + 1)))
     error(EXIT_FAILURE, errno, "malloc");

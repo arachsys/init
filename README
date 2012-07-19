@@ -1,4 +1,100 @@
-This is a lightweight BSD-style init used in Arachsys Linux.
+Arachsys init
+=============
 
-run-init.c is a slightly modified version of run_init by H. Peter Anvin,
-also released under the terms of the MIT license.
+This is the lightweight BSD-style init and syslog system used in Arachsys
+Linux. It includes a number of small utilities, described below.
+
+
+daemon
+------
+
+FreeBSD has included a useful daemon(8) since 5.0-RELEASE in early 2003.
+This is a Linux-specific reimplementation which supports the same options as
+the FreeBSD version, together with some additional features to make it a
+more useful building-block for simple dependency-based parallel execution
+during system boot.
+
+Its basic purpose is to detach from the controlling terminal and execute a
+command (specified by its arguments) as a background daemon. In common with
+the original, it has options to change to the root directory before
+starting, to lock, write and remove a pidfile on behalf of the command, to
+restart the command when it exits, and to drop privileges to a different
+user and group before execution. This version can also start a logger
+process to send output to syslog and uses inotify to implement simple
+dependencies, waiting for specified filesystem paths to be created before
+starting the command. (Typically this is used with pidfiles or unix sockets
+in /run.)
+
+
+init
+----
+
+The init utility is meant to be run by the kernel as process 1. Upon
+startup, it forks and executes the /etc/rc.startup script to bring up the
+system.
+
+Once /etc/rc.startup has finished, init handles SIGCHLD and calls waitpid()
+for all of its children. Being the first process, it automatically adopts
+any orphan processes whose natural parent has died, and is therefore
+responsible for reaping them to avoid the build-up of zombie-processes.
+
+On receipt of SIGINT, init forks and executes /etc/rc.shutdown. Once this
+script has exited, it reboots the system. It responds similarly to SIGTERM,
+SIGUSR1 and SIGUSR2, in each case waiting for /etc/rc.shutdown to finish
+before (respectively) executing a single-user shell, halting the system, or
+powering-down.
+
+Convenience shell scripts for the 'reboot', 'single', 'halt' and 'poweroff'
+actions are installed alongside init. Each of these just sends the
+appropriate signal to process 1.
+
+
+syslog
+------
+
+This little system logger daemon takes a rather different approach to its
+mainstream competitors, more in keeping with the Unix 'toolkit' philosophy.
+
+syslog reads messages as they arrive at /var/log and /proc/kmsg, printing
+them to stdout in a format carefully chosen for ease of handling in a
+shell-script read loop. For convenience, if syslog is provided with
+arguments, it will run them as a command in a child process and pipe its
+output to this command instead of stdout.
+
+Each line of output consists of five space-separated fields:
+
+  - facility name: daemon, kern, authpriv, etc.
+  - numeric log level from 0 (LOG_EMERG) to 7 (LOG_DEBUG)
+  - date in the format YYYY-MM-DD
+  - time in the 24-hour format HH:MM:SS
+  - the log message itself
+
+Dates and times are given in UTC rather than local time unless syslog.c was
+compiled with -DUTC=0.
+
+A simple syslogd script which wraps syslog is installed with it, together
+with fsync and fdatasync programs which can be used to fsync() or
+fdatasync() low-volume log files to ensure they are committed safely to disk
+after lines have been written.
+
+
+Building and installing
+-----------------------
+
+Unpack the source tar.gz file and change to the unpacked directory.
+
+Run 'make', then 'make install' to install the scripts and binaries in /bin.
+Alternatively, you can set DESTDIR and/or BINDIR to install in a different
+location, or strip and copy the compiled binaries and scripts into the
+correct place manually.
+
+Arachsys init was developed on GNU/Linux and is unlikely to be portable to
+other platforms as it uses a number of Linux-specific facilities. Please
+report any problems or bugs to Chris Webb <chris@arachsys.com>.
+
+
+Copying
+-------
+
+Arachsys init was written by Chris Webb <chris@arachsys.com> and is
+distributed as Free Software under the terms of the MIT license in COPYING.

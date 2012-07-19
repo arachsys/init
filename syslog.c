@@ -197,6 +197,7 @@ int main(int argc, char **argv) {
   addr.sun_family = AF_UNIX;
   snprintf(addr.sun_path, sizeof(addr.sun_path), "%s", SYSLOG);
   unlink(addr.sun_path);
+  umask(0111); /* Syslog socket should be writeable by everyone. */
   if (bind(fds[1].fd, (struct sockaddr *) &addr, sizeof(struct sockaddr_un)))
     error(EXIT_FAILURE, errno, "bind %s", addr.sun_path);
 

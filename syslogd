@@ -1,0 +1,46 @@
+#!/bin/bash
+
+if [[ $* != "-" ]]; then
+  unset FDATASYNC LOGDIR PIDFILE
+  while getopts :d:p:s OPTION; do
+    case $OPTION in
+      d)
+        LOGDIR=$OPTARG
+        ;;
+      p)
+        PIDFILE=$OPTARG
+        ;;
+      s)
+        FDATASYNC=1
+        ;;
+    esac
+  done
+  export FDATASYNC LOGDIR PIDFILE
+  exec daemon syslog "$0" -
+fi
+
+LOGDIR=${LOGDIR:-/var/log}
+PIDFILE=${PIDFILE:-/run/syslogd.pid}
+
+exec 3>>"$PIDFILE"
+if ! flock -n 3 2>/dev/null; then
+  echo "Failed to lock /run/syslogd.pid; is syslogd already running?" >&2
+  exit 1
+fi
+echo $PPID >"$PIDFILE"
+
+while read -r FACILITY LEVEL DATE TIME MESSAGE; do
+  if (( LEVEL > 6 )); then
+    continue
+  elif [[ $FACILITY == auth* ]]; then
+    FACILITY=auth
+  elif [[ $FACILITY != kern && $FACILITY != mail ]]; then
+    FACILITY=daemon
+  fi
+
+  mkdir -m 0700 -p "$LOGDIR/$FACILITY"
+  echo "$TIME $MESSAGE" >>"$LOGDIR/$FACILITY/$DATE"
+  [[ -n $FDATASYNC ]] && fdatasync "$LOGDIR/$FACILITY/$DATE"
+done
+
+rm -f "$PIDFILE"

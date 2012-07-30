@@ -91,7 +91,10 @@ pid_t run(char *filename, char **argv) {
       sigprocmask(SIG_SETMASK, &mask_default, NULL);
       argv[0] = filename;
       execv(filename, argv);
-      error(EXIT_FAILURE, errno, "exec %s", filename);
+      if (errno == ENOENT)
+        exit(EXIT_SUCCESS);
+      else
+        error(EXIT_FAILURE, errno, "exec %s", filename);
     default:
       return pid;
   }

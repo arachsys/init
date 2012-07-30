@@ -355,6 +355,7 @@ int main(int argc, char **argv) {
           error(EXIT_FAILURE, errno, "setgid");
         if (command.uid > 0 && setuid(command.uid) < 0)
           error(EXIT_FAILURE, errno, "setuid");
+        setsid(); /* This should work after forking; ignore errors anyway. */
         execvp(command.argv[0], command.argv);
         error(EXIT_FAILURE, errno, "exec");
     }

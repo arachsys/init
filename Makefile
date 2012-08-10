@@ -6,7 +6,7 @@ CC = gcc
 CFLAGS = -Os -Wall -pedantic -std=gnu99
 LDFLAGS =
 
-SCRIPTS = halt poweroff reboot single syslogd
+SCRIPTS = halt poweroff reboot single syslogd ueventd
 BINARIES = daemon fsync init syslog uevent
 
 all: ${SCRIPTS} ${BINARIES}

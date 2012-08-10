@@ -1,0 +1,72 @@
+#!/bin/bash
+
+CONFFILE=/etc/ueventd.conf
+PIDFILE=/run/ueventd.pid
+RESTART=0
+SYSFS=${SYSFS:-/sys}
+
+while getopts :f:p: OPTION; do
+  case $OPTION in
+    f)
+      CONFFILE=$OPTARG
+      ;;
+    p)
+      PIDFILE=$OPTARG
+      ;;
+  esac
+done
+
+add() { :; }
+change() { :; }
+event() { :; }
+move() { :; }
+offline() { :; }
+online() { :; }
+remove() { :; }
+
+if [[ ! -f $CONFFILE ]]; then
+  exit 0
+elif ! source "$CONFFILE"; then
+  exit 1
+fi
+
+if [[ ${*:$OPTIND} != "-" ]]; then
+  if { exec 3>>"$PIDFILE" && flock -n 3; } 2>/dev/null; then
+    exec env -i PATH="$PATH" daemon uevent "$0" "${@:1:$((OPTIND - 1))}" -
+    rm -f "$PIDFILE"
+  else
+    echo "Failed to lock $PIDFILE; is ${0##*/} already running?" >&2
+  fi
+  exit 1
+fi
+
+trap 'RESTART=0 && exit' SIGTERM
+trap 'RESTART=1 && exit' SIGHUP SIGINT SIGUSR1 SIGUSR2
+trap '(( RESTART )) && exec "$0" "$@" || rm -f "$PIDFILE"' EXIT
+
+echo $PPID >"$PIDFILE"
+exec 3>&-
+
+declare -A ENV=()
+while read -r KEY VALUE; do
+  if [[ -n $KEY ]]; then
+    ENV[$KEY]=$VALUE
+    continue
+  fi
+
+  unset ACTION DEVNAME DEVPATH DRIVER INTERFACE SUBSYSTEM SYSPATH
+  [[ -n ${ENV[ACTION]+defined} ]] && ACTION=${ENV[ACTION]}
+  [[ -n ${ENV[DEVNAME]+defined} ]] && DEVNAME=${ENV[DEVNAME]}
+  [[ -n ${ENV[DEVPATH]+defined} ]] && DEVPATH=${ENV[DEVPATH]}
+  [[ -n ${ENV[DRIVER]+defined} ]] && DRIVER=${ENV[DRIVER]}
+  [[ -n ${ENV[INTERFACE]+defined} ]] && DRIVER=${ENV[INTERFACE]}
+  [[ -n ${ENV[SUBSYSTEM]+defined} ]] && SUBSYSTEM=${ENV[SUBSYSTEM]}
+  [[ -n ${ENV[DEVPATH]+defined} ]] && SYSPATH=$SYSFS${ENV[DEVPATH]}
+
+  case $ACTION in
+    add | change | move | offline | online | remove)
+      event $ACTION $DEVPATH && $ACTION $DEVPATH
+      ;;
+  esac
+  ENV=()
+done

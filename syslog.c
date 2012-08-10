@@ -33,14 +33,25 @@
 #define UTC 1
 #endif
 
-void handler_run(char **argv) {
+static pid_t pid;
+
+void handler(int sig) {
+  if (pid > 0)
+    kill(pid, sig);
+  if (sig == SIGTERM)
+    exit(EXIT_SUCCESS);
+  return;
+}
+
+void subprocess(char **argv) {
   int logpipe[2];
+  struct sigaction action;
 
   if (pipe(logpipe) < 0)
     error(EXIT_FAILURE, errno, "pipe");
 
   signal(SIGCHLD, SIG_IGN);
-  switch (fork()) {
+  switch (pid = fork()) {
     case -1:
       error(EXIT_FAILURE, errno, "fork");
     case 0:
@@ -56,6 +67,17 @@ void handler_run(char **argv) {
     error(EXIT_FAILURE, errno, "dup2");
   close(logpipe[0]);
   close(logpipe[1]);
+
+  /* Pass on HUP, INT, TERM, USR1, USR2 signals, and exit on SIGTERM. */
+  sigfillset(&action.sa_mask);
+  action.sa_flags = SA_RESTART;
+  action.sa_handler = handler;
+  sigaction(SIGHUP, &action, NULL);
+  sigaction(SIGINT, &action, NULL);
+  sigaction(SIGTERM, &action, NULL);
+  sigaction(SIGUSR1, &action, NULL);
+  sigaction(SIGUSR2, &action, NULL);
+
   argv[0] = NULL;
   return;
 }
@@ -181,7 +203,7 @@ int main(int argc, char **argv) {
   } syslog;
 
   if (argc > 1)
-    handler_run(argv + 1);
+    subprocess(argv + 1);
 
   if (!(kernel.data = malloc(kernel.size = BUFFER + 1)))
     error(EXIT_FAILURE, errno, "malloc");
@@ -203,8 +225,9 @@ int main(int argc, char **argv) {
 
   fds[0].events = fds[1].events = POLLIN;
   while(1) {
-    if (poll(fds, 2, -1) < 0)
-      error(EXIT_FAILURE, errno, "poll");
+    while (poll(fds, 2, -1) < 0)
+      if (errno != EAGAIN && errno != EINTR)
+        error(EXIT_FAILURE, errno, "poll");
     if (fds[0].revents & POLLIN)
       if (!kernel_read(fds[0].fd, kernel.data, &kernel.length, kernel.size))
         fds[0].events = 0;

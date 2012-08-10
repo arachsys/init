@@ -4,14 +4,18 @@ CONFFILE=/etc/ueventd.conf
 PIDFILE=/run/ueventd.pid
 RESTART=0
 SYSFS=${SYSFS:-/sys}
+TRIGGER=0
 
-while getopts :f:p: OPTION; do
+while getopts :f:p:t OPTION; do
   case $OPTION in
     f)
       CONFFILE=$OPTARG
       ;;
     p)
       PIDFILE=$OPTARG
+      ;;
+    t)
+      TRIGGER=1
       ;;
   esac
 done
@@ -47,6 +51,15 @@ trap '(( RESTART )) && exec "$0" "$@" || rm -f "$PIDFILE"' EXIT
 echo $PPID >"$PIDFILE"
 exec 3>&-
 
+if (( TRIGGER )); then
+  find $SYSFS/{module,bus,devices} -name uevent -type f \
+    | while read UEVENT; do echo change >"$UEVENT"; done
+  for (( INDEX = 1; INDEX <= $#; INDEX++ )); do
+    [[ ${!INDEX} == "-t" ]] && set -- "${@:1:INDEX - 1}" "${@:INDEX + 1}"
+  done
+  unset INDEX
+fi
+
 declare -A ENV=()
 while read -r KEY VALUE; do
   if [[ -n $KEY ]]; then
@@ -54,7 +67,7 @@ while read -r KEY VALUE; do
     continue
   fi
 
-  unset ACTION DEVNAME DEVPATH DRIVER INTERFACE SUBSYSTEM SYSPATH
+  unset ACTION DEVNAME DEVPATH DRIVER INTERFACE KEY SUBSYSTEM SYSPATH VALUE
   [[ -n ${ENV[ACTION]+defined} ]] && ACTION=${ENV[ACTION]}
   [[ -n ${ENV[DEVNAME]+defined} ]] && DEVNAME=${ENV[DEVNAME]}
   [[ -n ${ENV[DEVPATH]+defined} ]] && DEVPATH=${ENV[DEVPATH]}

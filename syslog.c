@@ -216,11 +216,12 @@ int main(int argc, char **argv) {
 
   if ((fds[1].fd = socket(AF_UNIX, SOCK_DGRAM, 0)) < 0)
     error(EXIT_FAILURE, errno, "socket");
+  memset(&addr, 0, sizeof(addr));
   addr.sun_family = AF_UNIX;
   snprintf(addr.sun_path, sizeof(addr.sun_path), "%s", SYSLOG);
   unlink(addr.sun_path);
   umask(0111); /* Syslog socket should be writeable by everyone. */
-  if (bind(fds[1].fd, (struct sockaddr *) &addr, sizeof(struct sockaddr_un)))
+  if (bind(fds[1].fd, (struct sockaddr *) &addr, sizeof(addr)))
     error(EXIT_FAILURE, errno, "bind %s", addr.sun_path);
 
   fds[0].events = fds[1].events = POLLIN;

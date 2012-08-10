@@ -69,6 +69,7 @@ int main(int argc, char **argv) {
   if (argc > 1)
     subprocess(argv + 1);
 
+  memset(&addr, 0, sizeof(addr));
   addr.nl_family = AF_NETLINK;
   addr.nl_pid = getpid();
   addr.nl_groups = 1;

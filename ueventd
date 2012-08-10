@@ -36,7 +36,7 @@ fi
 
 if [[ ${*:$OPTIND} != "-" ]]; then
   if { exec 3>>"$PIDFILE" && flock -n 3; } 2>/dev/null; then
-    exec env -i PATH="$PATH" daemon uevent "$0" "${@:1:$((OPTIND - 1))}" -
+    exec env -i PATH="$PATH" daemon uevent "$0" "${@:1:OPTIND - 1}" -
     rm -f "$PIDFILE"
   else
     echo "Failed to lock $PIDFILE; is ${0##*/} already running?" >&2

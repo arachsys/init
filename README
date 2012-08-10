@@ -49,8 +49,8 @@ actions are installed alongside init. Each of these just sends the
 appropriate signal to process 1.
 
 
-syslog
-------
+syslog and syslogd
+------------------
 
 This little system logger daemon takes a rather different approach to its
 mainstream competitors, more in keeping with the Unix 'toolkit' philosophy.
@@ -76,6 +76,49 @@ A simple syslogd script which wraps syslog is installed with it, together
 with fsync and fdatasync programs which can be used to fsync() or
 fdatasync() low-volume log files to ensure they are committed safely to disk
 after lines have been written.
+
+
+uevent and ueventd
+------------------
+
+The kernel notifies userspace of device creation with uevents sent to
+clients listening on a NETLINK_KOBJECT_UEVENT sockets. As they arrive,
+uevent lists the uevent properties to stdout in a simple space-separated
+key/value format with a blank line terminating the record. This format is
+carefully chosen for easy of handling in a shell-script read loop.  For
+convenience, if uevent is provided with arguments, it will run them as a
+command in a child process and pipe its output to this command instead of
+stdout.
+
+An example uevent property list for a newly created disk device is
+
+  ACTION add
+  DEVPATH /devices/pci0000:00/0000:00:1f.2/ata1/host0/target0:0:0/0:0:0:0/block/sda
+  SUBSYSTEM block
+  MAJOR 8
+  MINOR 0
+  DEVNAME sda
+  DEVTYPE disk
+  SEQNUM 5561
+
+DEVPATH is the path within the sysfs mount for the relevant device, and
+DEVNAME (if set) is the path of the kernel-created device node in devtmpfs.
+Network interfaces will instead have an INTERFACE property with their name
+that was allocated by the kernel.
+
+A simple ueventd script to handle uevent output is installed with it, as
+cleaner, more flexible replacement for udev. To use this, define bash
+functions add(), remove(), change(), etc. (matching the uevent ACTION types)
+in /etc/ueventd.conf, which is sourced by the script on start. The event()
+shell function is also called for all events, with the ACTION and DEVPATH in
+its first two arguments.
+
+All of the shell functions defined in /etc/ueventd.conf will be called with
+the uevent environment list (properties) in an associative array ENV
+together with the most commonly accessed properties in the shell variables
+ACTION, DEVNAME, DEVPATH, DRIVER, INTERFACE and SUBSYSTEM. For convenience,
+SYSPATH is also set to the absolute path of the device directory, i.e.
+${SYSFS}${DEVPATH} where $SYSFS is typically /sys.
 
 
 Building and installing

@@ -87,7 +87,12 @@ int main(int argc, char **argv) {
       continue;
     }
 
+    /* Null-terminate the uevent and replace stray newlines with spaces. */
     buffer[length] = 0;
+    for (cursor = buffer; cursor < buffer + length; cursor++)
+      if (*cursor == '\n')
+        *cursor = ' ';
+
     if (strlen(buffer) >= length - 1) {
       /* No properties; fake a simple environment based on the header. */
       if ((cursor = strchr(buffer, '@'))) {

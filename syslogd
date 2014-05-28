@@ -38,14 +38,18 @@ exec 3>&-
 
 while read -r FACILITY LEVEL DATE TIME MESSAGE; do
   if (( LEVEL > 6 )); then
-    continue
+    FACILITY=debug
   elif [[ $FACILITY == auth* ]]; then
     FACILITY=auth
   elif [[ $FACILITY != kern && $FACILITY != mail ]]; then
     FACILITY=daemon
   fi
 
-  mkdir -m 0700 -p "$LOGDIR/$FACILITY"
+  if [[ ! -d $LOGDIR/$FACILITY ]]; then
+    [[ $FACILITY == debug ]] && continue
+    mkdir -m 0700 -p "$LOGDIR/$FACILITY"
+  fi
+
   echo "$TIME $MESSAGE" >>"$LOGDIR/$FACILITY/$DATE"
   (( FDATASYNC )) && fdatasync "$LOGDIR/$FACILITY/$DATE"
 done

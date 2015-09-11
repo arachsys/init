@@ -121,6 +121,7 @@ int main(int argc, char **argv) {
 
   if (getpid() != 1)
     error(EXIT_FAILURE, 0, "Init must be run as process 1");
+  chdir("/");
   setsid();
 
   sigfillset(&action.sa_mask);

@@ -88,6 +88,7 @@ pid_t run(char *filename, char **argv) {
       error(0, errno, "fork");
       return 0;
     case 0:
+      setsid();
       sigprocmask(SIG_SETMASK, &mask_default, NULL);
       argv[0] = filename;
       execv(filename, argv);

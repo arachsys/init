@@ -1,5 +1,4 @@
 #include <errno.h>
-#include <error.h>
 #include <fcntl.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -21,13 +20,14 @@ int main(int argc, char **argv) {
 
   for (argv++, argc--, errc = 0; argc > 0; argv++, argc--) {
     if ((fd = open(*argv, O_WRONLY)) < 0) {
-      error(0, errno, "open %s", *argv);
+      fprintf(stderr, "open %s: %s\n", *argv, strerror(errno));
       errc++;
       continue;
     }
 
     if ((datasync ? fdatasync : fsync)(fd) < 0) {
-      error(0, errno, "%s %s", datasync ? "fdatasync" : "fsync", *argv);
+      fprintf(stderr, "%s %s: %s\n", datasync ? "fdatasync" : "fsync",
+                                     *argv, strerror(errno));
       errc++;
     }
 

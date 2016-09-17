@@ -1,10 +1,10 @@
 #include <errno.h>
-#include <error.h>
 #include <paths.h>
 #include <signal.h>
 #include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include <unistd.h>
 #include <sys/ioctl.h>
 #include <sys/reboot.h>
@@ -16,9 +16,24 @@
 #define SINGLE_PROG _PATH_BSHELL
 
 static pid_t wait_pid = 0;
-static char *shutdown_type = NULL;
+static char *progname, *shutdown_type = NULL;
 static void (*shutdown_action)(void) = NULL;
 static sigset_t mask_all, mask_default, mask_wait;
+
+void error(int status, int errnum, char *format, ...) {
+  va_list args;
+
+  fprintf(stderr, "%s: ", progname);
+  va_start(args, format);
+  vfprintf(stderr, format, args);
+  va_end(args);
+  if (errnum != 0)
+    fprintf(stderr, ": %s\n", strerror(errnum));
+  else
+    fputc('\n', stderr);
+  if (status != 0)
+    exit(status);
+}
 
 void final_reboot(void) {
   sigprocmask(SIG_SETMASK, &mask_all, NULL);
@@ -119,6 +134,7 @@ void shutdown(void) {
 int main(int argc, char **argv) {
   struct sigaction action;
 
+  progname = argv[0];
   if (getpid() != 1)
     error(EXIT_FAILURE, 0, "Init must be run as process 1");
   chdir("/");

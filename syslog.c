@@ -1,11 +1,11 @@
-#define _XOPEN_SOURCE 500
+#define _GNU_SOURCE
 #define SYSLOG_NAMES
 #include <ctype.h>
 #include <errno.h>
-#include <error.h>
 #include <fcntl.h>
 #include <poll.h>
 #include <signal.h>
+#include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -34,6 +34,22 @@
 #endif
 
 static pid_t pid;
+static char *progname;
+
+void error(int status, int errnum, char *format, ...) {
+  va_list args;
+
+  fprintf(stderr, "%s: ", progname);
+  va_start(args, format);
+  vfprintf(stderr, format, args);
+  va_end(args);
+  if (errnum != 0)
+    fprintf(stderr, ": %s\n", strerror(errnum));
+  else
+    fputc('\n', stderr);
+  if (status != 0)
+    exit(status);
+}
 
 void handler(int sig) {
   if (pid > 0)
@@ -202,6 +218,7 @@ int main(int argc, char **argv) {
     size_t size;
   } syslog;
 
+  progname = argv[0];
   if (argc > 1)
     subprocess(argv + 1);
 

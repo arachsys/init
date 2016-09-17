@@ -1,8 +1,8 @@
 #include <errno.h>
-#include <error.h>
 #include <fcntl.h>
 #include <limits.h>
 #include <pwd.h>
+#include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -30,6 +30,22 @@ static struct {
   FILE *file;
 } pidfile;
 
+static char *progname;
+
+void error(int status, int errnum, char *format, ...) {
+  va_list args;
+
+  fprintf(stderr, "%s: ", progname);
+  va_start(args, format);
+  vfprintf(stderr, format, args);
+  va_end(args);
+  if (errnum != 0)
+    fprintf(stderr, ": %s\n", strerror(errnum));
+  else
+    fputc('\n', stderr);
+  if (status != 0)
+    exit(status);
+}
 
 void await(const char *path, int inotify, int parent) {
   char *slash;
@@ -263,6 +279,7 @@ int main(int argc, char **argv) {
   time_t started;
   struct sigaction action;
 
+  progname = argv[0];
   options = "+:cfl:p:ru:w:", waitargs = 0;
   while ((option = getopt(argc, argv, options)) > 0)
     switch (option) {

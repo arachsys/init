@@ -24,6 +24,7 @@ static struct {
 
 static struct {
   char *priority, *tag;
+  int file;
 } logger;
 
 static struct {
@@ -143,6 +144,16 @@ void logger_setup(const char *spec) {
   if (!(logger.tag = strdup(spec)))
     error(EXIT_FAILURE, errno, "strdup");
 
+  /* Logging to file indicated by absolute path. */
+  if (*logger.tag == '/') {
+    logger.file = open(logger.tag, O_RDWR | O_APPEND | O_CREAT, 0666);
+    if (logger.file < 0)
+      error(EXIT_FAILURE, errno, "%s", logger.tag);
+    if (flock(logger.file, LOCK_EX | LOCK_NB) < 0)
+      error(EXIT_FAILURE, 0, "%s already locked", logger.tag);
+    return;
+  }
+
   /* Log spec format is TAG:PRIORITY. */
   if ((logger.priority = strchr(logger.tag, ':'))) {
     *logger.priority++ = 0;
@@ -168,15 +179,31 @@ void logger_setup(const char *spec) {
 
   /* The logger subprocess writes its own message to stderr on failure. */
   if (!WIFEXITED(status) || WEXITSTATUS(status) != 0)
-    exit(1);
+    exit(EXIT_FAILURE);
 }
 
 void logger_start(void) {
   int logpipe[2];
 
-  /* Don't try to do anything if the logger hasn't been configured. */
-  if (!logger.tag)
+  /* Redirect stdout and stderr to /dev/null if logging isn't configured. */
+  if (!logger.tag) {
+    if (dup2(STDIN_FILENO, STDOUT_FILENO) < 0)
+      error(EXIT_FAILURE, errno, "dup2");
+    if (dup2(STDIN_FILENO, STDERR_FILENO) < 0)
+      error(EXIT_FAILURE, errno, "dup2");
     return;
+  }
+
+  /* Redirect stdout and stderr if a log file has been specified. */
+  if (*logger.tag == '/') {
+    if (dup2(logger.file, STDOUT_FILENO) < 0)
+      error(EXIT_FAILURE, errno, "dup2");
+    if (dup2(logger.file, STDERR_FILENO) < 0)
+      error(EXIT_FAILURE, errno, "dup2");
+    if (logger.file != STDOUT_FILENO && logger.file != STDERR_FILENO)
+      close(logger.file);
+    return;
+  }
 
   if (pipe(logpipe) < 0)
     error(EXIT_FAILURE, errno, "pipe");
@@ -262,6 +289,8 @@ Options:\n\
   -c            change directory to the root before running the command\n\
   -l TAG:PRI    redirect stdout and stderr to a logger subprocess,\n\
                   using syslog tag TAG and priority/facility PRI\n\
+  -l LOGFILE    append stdout and stderr to a file LOGFILE, which must be\n\
+                  given as an absolute path whose first character is '/'\n\
   -p PIDFILE    lock PIDFILE and write pid to it, removing it on exit\n\
   -r            supervise the running command, restarting it if it dies\n\
                   and passing on TERM, INT, HUP, USR1 and USR2 signals\n\
@@ -325,7 +354,16 @@ int main(int argc, char **argv) {
   if (argc <= optind)
     usage(argv[0]);
 
-  daemon(1, 0);
+  switch (fork()) {
+    case -1:
+      error(EXIT_FAILURE, errno, "fork");
+    case 0:
+      setsid(); /* This should work after forking; ignore errors anyway. */
+      break;
+    default:
+      _exit(EXIT_SUCCESS); /* Don't delete pidfile in atexit() handler. */
+  }
+
   logger_start();
   pidfile_write();
 

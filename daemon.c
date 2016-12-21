@@ -119,7 +119,6 @@ void await(const char *path, int inotify, int parent) {
 
 out:
   inotify_rm_watch(inotify, watch);
-  return;
 }
 
 void handler(int sig) {
@@ -131,7 +130,6 @@ void handler(int sig) {
     command.killed = 1;
     kill(command.pid, sig);
   }
-  return;
 }
 
 void logger_setup(const char *spec) {
@@ -207,7 +205,6 @@ void logger_start(void) {
     error(EXIT_FAILURE, errno, "dup2");
   close(logpipe[0]);
   close(logpipe[1]);
-  return;
 }
 
 void pidfile_close(void) {
@@ -215,7 +212,6 @@ void pidfile_close(void) {
     close(pidfile.file);
     unlink(pidfile.path);
   }
-  return;
 }
 
 void pidfile_open(const char *path) {
@@ -228,7 +224,6 @@ void pidfile_open(const char *path) {
     error(EXIT_FAILURE, errno, "%s", path);
   atexit(pidfile_close);
   ftruncate(pidfile.file, 0);
-  return;
 }
 
 void pidfile_write(void) {
@@ -243,7 +238,6 @@ void pidfile_write(void) {
       error(EXIT_FAILURE, errno, "write %s", pidfile.path);
     free(pid);
   }
-  return;
 }
 
 void user_setup(char *name) {
@@ -259,7 +253,6 @@ void user_setup(char *name) {
       error(EXIT_FAILURE, 0, "Invalid username");
     }
   }
-  return;
 }
 
 void usage(char *progname) {

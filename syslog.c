@@ -56,7 +56,6 @@ void handler(int sig) {
     kill(pid, sig);
   if (sig == SIGTERM)
     exit(EXIT_SUCCESS);
-  return;
 }
 
 void subprocess(char **argv) {
@@ -95,7 +94,6 @@ void subprocess(char **argv) {
   sigaction(SIGUSR2, &action, NULL);
 
   argv[0] = NULL;
-  return;
 }
 
 int kernel_print(char *line) {

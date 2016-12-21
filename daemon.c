@@ -274,12 +274,26 @@ Options:\n\
 
 int main(int argc, char **argv) {
   char *options, *path;
-  int inotify, option, pwd, waitargs;
+  int inotify, option, null, pwd, waitargs;
   pid_t pid;
   time_t started;
   struct sigaction action;
 
   progname = argv[0];
+
+  /* Redirect stdin from /dev/null. */
+  if ((null = open("/dev/null", O_RDWR)) < 0)
+    error(EXIT_FAILURE, errno, "open /dev/null");
+  if (null != STDIN_FILENO)
+    if ((dup2(null, STDIN_FILENO)) < 0)
+      error(EXIT_FAILURE, errno, "dup2");
+
+  /* Redirect stdout and/or stderr to /dev/null if closed. */
+  while (null <= STDERR_FILENO)
+    if ((null = dup(null)) < 0)
+      error(EXIT_FAILURE, errno, "dup");
+  close(null);
+
   options = "+:cfl:p:ru:w:", waitargs = 0;
   while ((option = getopt(argc, argv, options)) > 0)
     switch (option) {

@@ -158,8 +158,7 @@ void logger_setup(const char *spec) {
     case 0:
       if (chdir("/") < 0)
         error(EXIT_FAILURE, errno, "chdir");
-      close(STDIN_FILENO);
-      execlp("logger", "logger",
+      execlp("logger", "logger", "-f", "/dev/null",
           "-p", logger.priority ? logger.priority : "daemon.notice",
           "-t", logger.tag, NULL);
       error(EXIT_FAILURE, errno, "exec");

@@ -1,3 +1,4 @@
+#define _GNU_SOURCE
 #include <errno.h>
 #include <fcntl.h>
 #include <limits.h>
@@ -27,7 +28,7 @@ static struct {
 
 static struct {
   char *path;
-  FILE *file;
+  int file;
 } pidfile;
 
 static char *progname;
@@ -210,30 +211,37 @@ void logger_start(void) {
 }
 
 void pidfile_close(void) {
-  if (pidfile.file)
-    fclose(pidfile.file);
-  if (pidfile.path)
+  if (pidfile.path) {
+    close(pidfile.file);
     unlink(pidfile.path);
+  }
   return;
 }
 
 void pidfile_open(const char *path) {
-  if (!(pidfile.file = fopen(path, "a+")))
+  pidfile.file = open(path, O_RDWR | O_CLOEXEC | O_CREAT, 0666);
+  if (pidfile.file < 0)
     error(EXIT_FAILURE, errno, "%s", path);
-  if (flock(fileno(pidfile.file), LOCK_EX | LOCK_NB) < 0)
+  if (flock(pidfile.file, LOCK_EX | LOCK_NB) < 0)
     error(EXIT_FAILURE, 0, "%s already locked", path);
   if (!(pidfile.path = realpath(path, NULL)))
     error(EXIT_FAILURE, errno, "%s", path);
   atexit(pidfile_close);
-  ftruncate(fileno(pidfile.file), 0);
-  rewind(pidfile.file);
+  ftruncate(pidfile.file, 0);
   return;
 }
 
 void pidfile_write(void) {
-  if (pidfile.file) {
-    fprintf(pidfile.file, "%ld\n", (long) getpid());
-    fflush(pidfile.file);
+  char *pid;
+  int length;
+
+  if (pidfile.path) {
+    length = asprintf(&pid, "%ld\n", (long) getpid());
+    if (length < 0)
+      error(EXIT_FAILURE, errno, "asprintf");
+    if (write(pidfile.file, pid, length) < 0)
+      error(EXIT_FAILURE, errno, "write %s", pidfile.path);
+    free(pid);
   }
   return;
 }
@@ -341,7 +349,7 @@ int main(int argc, char **argv) {
     error(EXIT_FAILURE, errno, "chdir");
 
   command.argv = argv + optind;
-  if (!command.restart && !pidfile.file) {
+  if (!command.restart && !pidfile.path) {
     /* We don't need to supervise in this case, so just exec. */
     if (command.gid > 0 && setgid(command.gid) < 0)
       error(EXIT_FAILURE, errno, "setgid");

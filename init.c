@@ -1,4 +1,5 @@
 #include <errno.h>
+#include <fcntl.h>
 #include <paths.h>
 #include <signal.h>
 #include <stdarg.h>
@@ -19,6 +20,20 @@ static pid_t wait_pid = 0;
 static char *progname, *shutdown_type = NULL;
 static void (*shutdown_action)(void) = NULL;
 static sigset_t mask_all, mask_default, mask_wait;
+
+void console(void) {
+  int fd;
+
+  if ((fd = open("/dev/console", O_RDWR)) < 0)
+    return;
+  if (fd != STDIN_FILENO) {
+    dup2(fd, STDIN_FILENO);
+    close(fd);
+  }
+  dup2(STDIN_FILENO, STDOUT_FILENO);
+  dup2(STDIN_FILENO, STDERR_FILENO);
+  ioctl(STDIN_FILENO, TIOCSCTTY, 0);
+}
 
 void error(int status, int errnum, char *format, ...) {
   va_list args;
@@ -56,8 +71,8 @@ void final_poweroff(void) {
 }
 
 void final_single(void) {
+  console();
   sigprocmask(SIG_SETMASK, &mask_default, NULL);
-  ioctl(0, TIOCSCTTY, 0);
   execl(SINGLE_PROG, SINGLE_PROG, NULL);
   error(0, errno, "exec %s", SINGLE_PROG);
   final_halt();
@@ -104,6 +119,7 @@ pid_t run(char *filename, char **argv) {
       return 0;
     case 0:
       setsid();
+      console();
       sigprocmask(SIG_SETMASK, &mask_default, NULL);
       argv[0] = filename;
       execv(filename, argv);
@@ -132,11 +148,17 @@ void shutdown(void) {
 }
 
 int main(int argc, char **argv) {
+  int fd;
   struct sigaction action;
 
   progname = argv[0];
   if (getpid() != 1)
     error(EXIT_FAILURE, 0, "Init must be run as process 1");
+
+  fd = getdtablesize() - 1;
+  while (fd >= 0)
+    close(fd--);
+
   chdir("/");
   setsid();
 

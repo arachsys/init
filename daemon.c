@@ -303,7 +303,7 @@ Options:\n\
 
 int main(int argc, char **argv) {
   char *options, *path;
-  int inotify, option, null, pwd, waitargs;
+  int fd, inotify, option, pwd, waitargs;
   pid_t pid;
   time_t started;
   struct sigaction action;
@@ -311,17 +311,22 @@ int main(int argc, char **argv) {
   progname = argv[0];
 
   /* Redirect stdin from /dev/null. */
-  if ((null = open("/dev/null", O_RDWR)) < 0)
+  if ((fd = open("/dev/null", O_RDWR)) < 0)
     error(EXIT_FAILURE, errno, "open /dev/null");
-  if (null != STDIN_FILENO)
-    if ((dup2(null, STDIN_FILENO)) < 0)
+  if (fd != STDIN_FILENO)
+    if ((dup2(fd, STDIN_FILENO)) < 0)
       error(EXIT_FAILURE, errno, "dup2");
 
   /* Redirect stdout and/or stderr to /dev/null if closed. */
-  while (null <= STDERR_FILENO)
-    if ((null = dup(null)) < 0)
+  while (fd <= STDERR_FILENO)
+    if ((fd = dup(fd)) < 0)
       error(EXIT_FAILURE, errno, "dup");
-  close(null);
+  close(fd);
+
+  /* Close all file descriptors apart from stdin, stdout and stderr. */
+  fd = getdtablesize() - 1;
+  while (fd > STDERR_FILENO)
+    close(fd--);
 
   options = "+:cfl:p:ru:w:", waitargs = 0;
   while ((option = getopt(argc, argv, options)) > 0)

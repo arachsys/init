@@ -29,24 +29,33 @@ in /run.)
 init
 ----
 
-The init utility is meant to be run by the kernel as process 1. Upon
-startup, it forks and executes the /etc/rc.startup script to bring up the
-system.
+Previous versions of this collection provided a minimal /bin/init, which
+launched an /etc/rc.startup script at boot, reaped orphans while waiting for
+a signal to shut down, then ran an /etc/rc.shutdown script to gracefully
+terminate the system. Finally, /bin/init would call reboot() to halt, reboot
+or power-off depending on the signal that was sent.
 
-Once /etc/rc.startup has finished, init handles SIGCHLD and calls waitpid()
-for all of its children. Being the first process, it automatically adopts
-any orphan processes whose natural parent has died, and is therefore
-responsible for reaping them to avoid the build-up of zombie-processes.
+However, competent shells will always reap adopted children, so this was
+unnecessarily complicated. It is sufficient to make /etc/init an executable
+script which starts the system exactly as /etc/rc.startup did, sleeps
+awaiting a signal to shutdown, then cleanly terminates the system like
+/etc/rc.startup, finally executing the stop utility below to reboot the
+kernel.
 
-On receipt of SIGINT, init forks and executes /etc/rc.shutdown. Once this
-script has exited, it reboots the system. It responds similarly to SIGTERM,
-SIGUSR1 and SIGUSR2, in each case waiting for /etc/rc.shutdown to finish
-before (respectively) executing a single-user shell, halting the system, or
-powering-down.
+Like the old /bin/init, an /etc/init script could sleep awaiting a signal,
+or for a more flexible interface, block reading commands from a /dev/initctl
+named pipe.
 
-Convenience shell scripts for the 'reboot', 'single', 'halt' and 'poweroff'
-actions are installed alongside init. Each of these just sends the
-appropriate signal to process 1.
+
+stop
+----
+
+Since a shell script cannot directly perform the final reboot() system call
+at the end of shutdown, the stop utility is provided to do this. This
+expects a single argument of 'halt', 'kexec', poweroff', 'reboot' or
+'shutdown' to indicate the type of reboot() call required. Run without an
+action argument, stop will list the available actions together with a
+warning about its lack of gracefulness.
 
 
 syslog and syslogd

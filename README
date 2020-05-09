@@ -46,6 +46,10 @@ Like the old /bin/init, an /etc/init script could sleep awaiting a signal,
 or for a more flexible interface, block reading commands from a /dev/initctl
 named pipe.
 
+A demonstration /etc/init is included in the examples/ subdirectory, along
+with an example /etc/fstab showing the required pseudo-filesystems and
+one-line scripts to trigger halt, poweroff and reboot actions.
+
 
 stop
 ----

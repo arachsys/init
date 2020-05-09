@@ -1,0 +1,7 @@
+/dev/vda / ext4 discard,noatime 1 1
+devtmpfs /dev devtmpfs noexec,nosuid 0 0
+devpts /dev/pts devpts newinstance,nosuid,noexec 0 0
+proc /proc proc nosuid,nodev,noexec 0 0
+tmpfs /run tmpfs nosuid,nodev,noexec 0 0
+sysfs /sys sysfs nosuid,nodev,noexec 0 0
+cgroup2 /sys/fs/cgroup cgroup2 nosuid,nodev,noexec 0 0

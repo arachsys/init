@@ -1,0 +1,49 @@
+#!/bin/bash
+
+set -o pipefail
+shopt -s dotglob extglob nullglob
+
+export PATH=/bin
+ctrlaltdel soft
+hostname example
+
+mount -a -n -t proc
+mount -a -n -t cgroup2,devtmpfs,sysfs,tmpfs
+mkdir -p /dev/pts && mount -a -n -t devpts
+mkdir -m 0755 -p /run/empty
+mkdir -m 1777 -p /run/lock /run/shm
+
+ln -f -n -s /proc/self/fd /dev/fd
+ln -f -n -s fd/0 /dev/stdin
+ln -f -n -s fd/1 /dev/stdout
+ln -f -n -s fd/2 /dev/stderr
+
+mount -n -o remount,ro /
+fsck -a -A -P -T >/dev/null || [[ $? -le 1 ]] || exec bash
+mount -o remount,rw /
+mount -a -t nonfs
+swapon -a -e
+
+ip link set lo up
+ip link set eth0 up
+ip address add 192.168.1.2/24 dev eth0
+ip route add default via 192.168.1.1
+
+[[ -d /var/log ]] && syslogd -s
+[[ -f /etc/ssh/sshd_config ]] && ssh-keygen -A && $(type -P sshd)
+
+# Start other daemons here
+
+[[ -r /dev/initctl ]] || mkfifo -m 0600 /dev/initctl
+while read -d '' -r MESSAGE; do
+  [[ $MESSAGE == @(halt|poweroff|reboot) ]] && break
+  [[ ${MESSAGE%% *} == run ]] && eval "${MESSAGE#run }"
+done <>/dev/initctl
+
+# Gracefully shut down daemons here
+
+kill -TERM -1 && sleep 5 && kill -KILL -1
+swapoff -a
+umount -a -r -t nodevtmpfs,noproc,noramfs,nosysfs,notmpfs
+stop "$MESSAGE"
+exec sleep infinity

@@ -1,0 +1,2 @@
+#!/bin/sh
+printf '\0reboot\0' >/dev/initctl

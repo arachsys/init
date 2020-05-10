@@ -3,6 +3,7 @@
 #include <string.h>
 #include <sysexits.h>
 #include <sys/reboot.h>
+#include <unistd.h>
 
 int main(int argc, char **argv) {
   if (argc == 2 && !strcmp(argv[1], "halt"))
@@ -10,7 +11,7 @@ int main(int argc, char **argv) {
   else if (argc == 2 && !strcmp(argv[1], "kexec"))
     return reboot(RB_KEXEC);
   else if (argc == 2 && !strcmp(argv[1], "poweroff"))
-    return reboot(RB_POWER_OFF);
+    return fork() > 0 ? pause() : reboot(RB_POWER_OFF);
   else if (argc == 2 && !strcmp(argv[1], "reboot"))
     return reboot(RB_AUTOBOOT);
   else if (argc == 2 && !strcmp(argv[1], "suspend"))

@@ -45,5 +45,4 @@ done <>/dev/initctl
 kill -TERM -1 && sleep 5 && kill -KILL -1
 swapoff -a
 umount -a -r -t nodevtmpfs,noproc,noramfs,nosysfs,notmpfs
-stop "$MESSAGE"
-exec sleep infinity
+exec stop "$MESSAGE"

@@ -1,6 +1,5 @@
 #define _GNU_SOURCE
 #define SYSLOG_NAMES
-#include <ctype.h>
 #include <errno.h>
 #include <fcntl.h>
 #include <poll.h>
@@ -96,49 +95,6 @@ void subprocess(char **argv) {
   argv[0] = NULL;
 }
 
-int kernel_print(char *line) {
-  int level, start;
-  struct tm date;
-  time_t now;
-
-  time(&now);
-  (UTC ? gmtime_r : localtime_r)(&now, &date);
-  start = 0, sscanf(line, " <%d> %n", &level, &start);
-
-  if (line[start])
-    printf("kern %d %04d-%02d-%02d %02d:%02d:%02d kernel: %s\n",
-        start > 0 ? level : 5, date.tm_year + 1900, date.tm_mon + 1,
-        date.tm_mday, date.tm_hour, date.tm_min, date.tm_sec, line + start);
-
-  return start;
-}
-
-size_t kernel_read(int fd, char *data, size_t *length, size_t size) {
-  char *cursor;
-  ssize_t new;
-
-  if ((new = read(fd, data + *length, size - *length - 1)) <= 0)
-    return 0;
-
-  for (cursor = data + *length; cursor < data + *length + new; cursor++)
-    *cursor = isprint(*cursor) ? *cursor : 0;
-  *length += new;
-
-  while ((cursor = memchr(data, 0, *length))) {
-    kernel_print(data);
-    *length = data + *length - cursor - 1;
-    memmove(data, cursor + 1, *length);
-  }
-
-  if (*length >= size - 1) {
-    data[size - 1] = 0;
-    *length = kernel_print(data);
-  }
-
-  fflush(stdout);
-  return new;
-}
-
 int syslog_date(char *line, struct tm *date) {
   char *cursor;
   time_t now;
@@ -162,14 +118,23 @@ int syslog_date(char *line, struct tm *date) {
   return cursor ? cursor - line : 0;
 }
 
-int syslog_priority(char *line, char **facility, int *level) {
-  int priority, start, value;
+char *syslog_facility(int priority) {
+  char *facility;
+  int value;
 
-  start = 0, sscanf(line, " <%d> %n", &priority, &start);
+  facility = "unknown"; /* facility not found in facilitynames[] */
+  for (value = 0; facilitynames[value].c_val >= 0; value++)
+    if (facilitynames[value].c_val == (priority & LOG_FACMASK))
+      facility = facilitynames[value].c_name;
+  return facility;
+}
+
+int syslog_priority(char *line, char **facility, int *level) {
+  int priority, start;
+
+  start = 0, sscanf(line, "<%d>%n", &priority, &start);
   if (start > 0) {
-    for (value = 0; facilitynames[value].c_val >= 0; value++)
-      if (facilitynames[value].c_val == (priority & LOG_FACMASK))
-        *facility = facilitynames[value].c_name;
+    *facility = syslog_facility(priority);
     *level = LOG_PRI(priority);
   }
 
@@ -185,21 +150,72 @@ void syslog_recv(int fd, char *data, size_t size) {
     return;
 
   for (cursor = data; cursor < data + length; cursor++)
-    *cursor = isprint(*cursor) ? *cursor : 0;
+    if (*cursor == 0 || *cursor == '\n')
+      *cursor = 0;
+    else if ((*cursor < 32 && *cursor != '\t') || *cursor == 127)
+      *cursor = ' ';
   data[length] = 0;
 
-  facility = "user";
-  level = 5;
-
-  for (cursor = data; cursor < data + length; cursor += strlen(cursor) + 1) {
+  cursor = data, facility = syslog_facility(LOG_USER), level = LOG_NOTICE;
+  while (cursor < data + length) {
     cursor += syslog_priority(cursor, &facility, &level);
     cursor += syslog_date(cursor, &date);
     if (*cursor)
       printf("%s %d %04d-%02d-%02d %02d:%02d:%02d %s\n", facility, level,
           date.tm_year + 1900, date.tm_mon + 1, date.tm_mday, date.tm_hour,
           date.tm_min, date.tm_sec, cursor);
+    cursor += strlen(cursor) + 1;
   }
   fflush(stdout);
+}
+
+int kernel_print(char *line) {
+  char *facility;
+  int level, start;
+  struct tm date;
+  time_t now;
+
+  time(&now);
+  (UTC ? gmtime_r : localtime_r)(&now, &date);
+
+  facility = syslog_facility(LOG_KERN), level = LOG_NOTICE;
+  start = syslog_priority(line, &facility, &level);
+
+  if (line[start])
+    printf("%s %d %04d-%02d-%02d %02d:%02d:%02d %s\n", facility, level,
+        date.tm_year + 1900, date.tm_mon + 1, date.tm_mday, date.tm_hour,
+        date.tm_min, date.tm_sec, line + start);
+
+  return start;
+}
+
+size_t kernel_read(int fd, char *data, size_t *length, size_t size) {
+  char *cursor;
+  ssize_t new;
+
+  if ((new = read(fd, data + *length, size - *length - 1)) <= 0)
+    return 0;
+
+  for (cursor = data + *length; cursor < data + *length + new; cursor++)
+    if (*cursor == 0 || *cursor == '\n')
+      *cursor = 0;
+    else if ((*cursor < 32 && *cursor != '\t') || *cursor == 127)
+      *cursor = ' ';
+  *length += new;
+
+  while ((cursor = memchr(data, 0, *length))) {
+    kernel_print(data);
+    *length = data + *length - cursor - 1;
+    memmove(data, cursor + 1, *length);
+  }
+
+  if (*length >= size - 1) {
+    data[size - 1] = 0;
+    *length = kernel_print(data);
+  }
+
+  fflush(stdout);
+  return new;
 }
 
 int main(int argc, char **argv) {

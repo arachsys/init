@@ -2,6 +2,7 @@
 #define SYSLOG_NAMES
 #include <errno.h>
 #include <fcntl.h>
+#include <features.h>
 #include <poll.h>
 #include <signal.h>
 #include <stdarg.h>
@@ -26,6 +27,15 @@
 
 #ifndef SYSLOG
 #define SYSLOG "/dev/log"
+#endif
+
+#ifndef UTCLOG
+/* syslog(3) time stamps are UTC from musl and local time from glibc. */
+#ifdef __GLIBC__
+#define UTCLOG 0
+#else
+#define UTCLOG 1
+#endif
 #endif
 
 #ifndef UTC
@@ -97,21 +107,15 @@ void subprocess(char **argv) {
 
 int syslog_date(char *line, struct tm *date) {
   char *cursor;
-  time_t now;
+  time_t now, offset;
 
   time(&now);
+  (UTCLOG ? gmtime_r : localtime_r)(&now, date);
   if ((cursor = strptime(line, " %b %d %H:%M:%S ", date))) {
-    /* Syslog reports timestamps in local time. */
-    date->tm_isdst = -1;
-
-    /* Pick tm_year so mktime(time) is closest to now. */
-    date->tm_year = localtime(&now)->tm_year;
-    if (mktime(date) > now + 15778800)
-      date->tm_year--;
-    else if (mktime(date) < now - 15778800)
-      date->tm_year++;
-
-    now = mktime(date);
+    /* Pick tm_year so the timestamp is closest to now. */
+    offset = now - (UTCLOG ? timegm : mktime)(date);
+    date->tm_year += (offset - 15778800) / 31557600;
+    now = (UTCLOG ? timegm : mktime)(date);
   }
 
   (UTC ? gmtime_r : localtime_r)(&now, date);

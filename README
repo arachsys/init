@@ -82,8 +82,14 @@ Each line of output consists of five space-separated fields:
   - time in the 24-hour format HH:MM:SS
   - the log message itself
 
-Dates and times are given in UTC rather than local time unless syslog.c was
-compiled with -DUTC=0.
+On glibc systems, syslog(3) sends datagrams to /dev/log with dates in the
+time zone of the calling process. On musl systems, these time stamps are
+always UTC. The right behaviour should be chosen automatically but can be
+explicitly configured at compile time with -DUTCLOG=0 or -DUTCLOG=1.
+
+By default, log lines are output in UTC unless compiled with -DUTC=0. Note
+that local time is ambiguous in time zones where daylight saving changes
+occur.
 
 A simple syslogd script which wraps syslog is installed with it, together
 with fsync and fdatasync programs which can be used to fsync() or

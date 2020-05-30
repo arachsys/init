@@ -7,7 +7,7 @@ CFLAGS = -Os -Wall -pedantic -std=gnu99
 LDFLAGS =
 
 SCRIPTS = syslogd ueventd
-BINARIES = daemon fsync pivot stop syslog uevent
+BINARIES = daemon fsync pivot seal stop syslog uevent
 
 all: ${SCRIPTS} ${BINARIES}
 

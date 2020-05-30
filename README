@@ -76,6 +76,32 @@ Despite the extra functionality, pivot is smaller than util-linux pivot_root
 and doesn't defile /bin with an ugly command name containing an underscore.
 
 
+seal
+----
+
+Linux treats /proc/self/exe and /proc/PID/exe in a strange magic way.
+Although stat() sees a symlink to the absolute path of the binary, open()
+accesses the binary itself whether or not the symlink can be resolved in
+the filesystem namespace of the opening process.
+
+Sometimes when sandboxing processes, this can leak a path to a host binary
+from inside an otherwise isolated container. For example, this led to the
+CVE-2019-5736 vulnerability in runC 'privileged containers'.
+
+One robust defence against this is to exec such processes from a sealed
+memfd rather than directly from the host filesystem. The seal utility
+provides an easy way to do this for an arbitrary program. Invoked as
+
+  seal PROG [ARG]...
+
+it locates PROG on the PATH, clones it to a new sealed memfd, then executes
+the memfd with the given arguments using fexecve().
+
+The behaviour of the shell and execvp/execlp is mirrored as closely as
+possible: PROG must be executable and program names containing '/'
+characters are assumed to be a full pathname, bypassing PATH.
+
+
 stop
 ----
 

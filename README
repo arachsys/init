@@ -51,6 +51,31 @@ with an example /etc/fstab showing the required pseudo-filesystems and
 one-line scripts to trigger halt, poweroff and reboot actions.
 
 
+pivot
+-----
+
+This is a replacement for pivot_root from util-linux. Run with two
+arguments as
+
+  pivot NEW-ROOT PUT-OLD
+
+it simply makes a pivot_root() syscall to move the root filesystem of the
+current mount namespace to the directory PUT-OLD and make NEW-ROOT the new
+root filesystem.
+
+However, unlike util-linux pivot_root, it can also be run with a single
+argument NEW-ROOT, omitting PUT-OLD. In this case, it uses a pivot_root()
+call to stack the old and new root filesystems on the same mount point,
+then completely detaches the old root filesystem before returning.
+
+Performing the detach operation atomically in a single command is helpful
+when constructing secure containers from a script. It eliminates the need
+to trust the umount binary within the container.
+
+Despite the extra functionality, pivot is smaller than util-linux pivot_root
+and doesn't defile /bin with an ugly command name containing an underscore.
+
+
 stop
 ----
 

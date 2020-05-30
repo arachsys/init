@@ -1,5 +1,6 @@
 #define _GNU_SOURCE
 #define SYSLOG_NAMES
+#include <err.h>
 #include <errno.h>
 #include <fcntl.h>
 #include <features.h>
@@ -45,21 +46,6 @@
 static pid_t pid;
 static char *progname;
 
-void error(int status, int errnum, char *format, ...) {
-  va_list args;
-
-  fprintf(stderr, "%s: ", progname);
-  va_start(args, format);
-  vfprintf(stderr, format, args);
-  va_end(args);
-  if (errnum != 0)
-    fprintf(stderr, ": %s\n", strerror(errnum));
-  else
-    fputc('\n', stderr);
-  if (status != 0)
-    exit(status);
-}
-
 void handler(int sig) {
   if (pid > 0)
     kill(pid, sig);
@@ -72,23 +58,23 @@ void subprocess(char **argv) {
   struct sigaction action;
 
   if (pipe(logpipe) < 0)
-    error(EXIT_FAILURE, errno, "pipe");
+    err(EXIT_FAILURE, "pipe");
 
   signal(SIGCHLD, SIG_IGN);
   switch (pid = fork()) {
     case -1:
-      error(EXIT_FAILURE, errno, "fork");
+      err(EXIT_FAILURE, "fork");
     case 0:
       if (dup2(logpipe[0], STDIN_FILENO) < 0)
-        error(EXIT_FAILURE, errno, "dup2");
+        err(EXIT_FAILURE, "dup2");
       close(logpipe[0]);
       close(logpipe[1]);
       execvp(argv[0], argv);
-      error(EXIT_FAILURE, errno, "exec");
+      err(EXIT_FAILURE, "exec");
   }
 
   if (dup2(logpipe[1], STDOUT_FILENO) < 0)
-    error(EXIT_FAILURE, errno, "dup2");
+    err(EXIT_FAILURE, "dup2");
   close(logpipe[0]);
   close(logpipe[1]);
 
@@ -241,29 +227,29 @@ int main(int argc, char **argv) {
     subprocess(argv + 1);
 
   if (!(kernel.data = malloc(kernel.size = BUFFER + 1)))
-    error(EXIT_FAILURE, errno, "malloc");
+    err(EXIT_FAILURE, "malloc");
   if (!(syslog.data = malloc(syslog.size = BUFFER + 1)))
-    error(EXIT_FAILURE, errno, "malloc");
+    err(EXIT_FAILURE, "malloc");
 
   if ((fds[0].fd = open(KERNEL, O_RDONLY)) < 0)
-    error(EXIT_FAILURE, errno, "open %s", KERNEL);
+    err(EXIT_FAILURE, "open %s", KERNEL);
   kernel.length = 0;
 
   if ((fds[1].fd = socket(AF_UNIX, SOCK_DGRAM, 0)) < 0)
-    error(EXIT_FAILURE, errno, "socket");
+    err(EXIT_FAILURE, "socket");
   memset(&addr, 0, sizeof(addr));
   addr.sun_family = AF_UNIX;
   snprintf(addr.sun_path, sizeof(addr.sun_path), "%s", SYSLOG);
   unlink(addr.sun_path);
   umask(0111); /* Syslog socket should be writeable by everyone. */
   if (bind(fds[1].fd, (struct sockaddr *) &addr, sizeof(addr)))
-    error(EXIT_FAILURE, errno, "bind %s", addr.sun_path);
+    err(EXIT_FAILURE, "bind %s", addr.sun_path);
 
   fds[0].events = fds[1].events = POLLIN;
   while(1) {
     while (poll(fds, 2, -1) < 0)
       if (errno != EAGAIN && errno != EINTR)
-        error(EXIT_FAILURE, errno, "poll");
+        err(EXIT_FAILURE, "poll");
     if (fds[0].revents & POLLIN)
       if (!kernel_read(fds[0].fd, kernel.data, &kernel.length, kernel.size))
         fds[0].events = 0;

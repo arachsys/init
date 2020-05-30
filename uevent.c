@@ -1,3 +1,4 @@
+#include <err.h>
 #include <errno.h>
 #include <signal.h>
 #include <stdarg.h>
@@ -12,22 +13,6 @@
 #define BUFFER 4096
 
 static pid_t pid;
-static char *progname;
-
-void error(int status, int errnum, char *format, ...) {
-  va_list args;
-
-  fprintf(stderr, "%s: ", progname);
-  va_start(args, format);
-  vfprintf(stderr, format, args);
-  va_end(args);
-  if (errnum != 0)
-    fprintf(stderr, ": %s\n", strerror(errnum));
-  else
-    fputc('\n', stderr);
-  if (status != 0)
-    exit(status);
-}
 
 void handler(int sig) {
   if (pid > 0)
@@ -41,23 +26,23 @@ void subprocess(char **argv) {
   struct sigaction action;
 
   if (pipe(eventpipe) < 0)
-    error(EXIT_FAILURE, errno, "pipe");
+    err(EXIT_FAILURE, "pipe");
 
   signal(SIGCHLD, SIG_IGN);
   switch (pid = fork()) {
     case -1:
-      error(EXIT_FAILURE, errno, "fork");
+      err(EXIT_FAILURE, "fork");
     case 0:
       if (dup2(eventpipe[0], STDIN_FILENO) < 0)
-        error(EXIT_FAILURE, errno, "dup2");
+        err(EXIT_FAILURE, "dup2");
       close(eventpipe[0]);
       close(eventpipe[1]);
       execvp(argv[0], argv);
-      error(EXIT_FAILURE, errno, "exec");
+      err(EXIT_FAILURE, "exec");
   }
 
   if (dup2(eventpipe[1], STDOUT_FILENO) < 0)
-    error(EXIT_FAILURE, errno, "dup2");
+    err(EXIT_FAILURE, "dup2");
   close(eventpipe[0]);
   close(eventpipe[1]);
 
@@ -80,7 +65,6 @@ int main(int argc, char **argv) {
   ssize_t length;
   struct sockaddr_nl addr;
 
-  progname = argv[0];
   if (argc > 1)
     subprocess(argv + 1);
 
@@ -90,15 +74,15 @@ int main(int argc, char **argv) {
   addr.nl_groups = 1;
 
   if ((sock = socket(PF_NETLINK, SOCK_DGRAM, NETLINK_KOBJECT_UEVENT)) < 0)
-    error(EXIT_FAILURE, errno, "socket");
+    err(EXIT_FAILURE, "socket");
 
   if (bind(sock, (struct sockaddr *) &addr, sizeof(addr)) < 0)
-    error(EXIT_FAILURE, errno, "bind");
+    err(EXIT_FAILURE, "bind");
 
   while (1) {
     if ((length = recv(sock, &buffer, sizeof(buffer) - 1, 0)) < 0) {
       if (errno != EAGAIN && errno != EINTR)
-        error(EXIT_FAILURE, errno, "recv");
+        err(EXIT_FAILURE, "recv");
       continue;
     }
 

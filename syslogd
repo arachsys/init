@@ -1,6 +1,6 @@
 #!/bin/bash
 
-FDATASYNC=0
+DATASYNC=0
 LOGDIR=/var/log
 PIDFILE=/run/syslogd.pid
 RESTART=0
@@ -14,7 +14,7 @@ while getopts :d:p:s OPTION; do
       PIDFILE=$OPTARG
       ;;
     s)
-      FDATASYNC=1
+      DATASYNC=1
       ;;
   esac
 done
@@ -51,5 +51,5 @@ while read -r FACILITY LEVEL DATE ENTRY; do
   fi
 
   echo "$ENTRY" >>"$LOGDIR/$FACILITY/$DATE"
-  (( FDATASYNC )) && fdatasync "$LOGDIR/$FACILITY/$DATE"
+  (( DATASYNC )) && sync -d "$LOGDIR/$FACILITY/$DATE"
 done

@@ -126,8 +126,11 @@ run them as a command in a child process and pipe its output to this command
 instead of stdout.
 
 By default, syslog is compiled with -DUTC=1 to select UTC timestamps. Each
-line of output then consists of five space-separated fields:
+line of output then consists of eight space-separated fields:
 
+  - process ID of the sender, or 0 for a kernel messsage
+  - numeric user ID of the sender, or 0 for a kernel message
+  - numeric group ID of the sender, or 0 for a kernel message
   - facility name: daemon, kern, authpriv, etc.
   - numeric log level from 0 (LOG_EMERG) to 7 (LOG_DEBUG)
   - date in the format YYYY-MM-DD

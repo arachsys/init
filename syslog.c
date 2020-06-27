@@ -134,10 +134,32 @@ int syslog_priority(char *line, char **facility, int *level) {
 void syslog_recv(int fd, char *data, size_t size) {
   char *cursor, *facility;
   int level, length;
+  struct iovec block;
+  struct msghdr header;
   struct tm date;
+  struct ucred id;
+  union {
+    struct cmsghdr hdr;
+    char data[CMSG_SPACE(sizeof(struct ucred))];
+  } cmsg;
 
-  if ((length = recv(fd, data, size - 1, 0)) <= 0)
+  block.iov_base = data;
+  block.iov_len = size - 1;
+  header.msg_name = NULL;
+  header.msg_namelen = 0;
+  header.msg_iov = &block;
+  header.msg_iovlen = 1;
+  header.msg_control = &cmsg;
+  header.msg_controllen = sizeof(cmsg);
+  header.msg_flags = 0;
+
+  if ((length = recvmsg(fd, &header, 0)) <= 0)
     return;
+
+  id.pid = id.uid = id.gid = 0;
+  if (cmsg.hdr.cmsg_level == SOL_SOCKET)
+    if (cmsg.hdr.cmsg_type == SCM_CREDENTIALS)
+      memcpy(&id, CMSG_DATA(&cmsg.hdr), sizeof(struct ucred));
 
   for (cursor = data; cursor < data + length; cursor++)
     if (*cursor == 0 || *cursor == '\n')
@@ -152,15 +174,16 @@ void syslog_recv(int fd, char *data, size_t size) {
     cursor += syslog_date(cursor, &date);
     if (*cursor) {
 #if UTC
-      printf("%s %d %04d-%02d-%02d %02d:%02d:%02d %s\n", facility, level,
-          date.tm_year + 1900, date.tm_mon + 1, date.tm_mday, date.tm_hour,
-          date.tm_min, date.tm_sec, cursor);
+      printf("%u %u %u %s %u %04u-%02u-%02u %02u:%02u:%02u %s\n", id.pid,
+          id.uid, id.gid, facility, level, date.tm_year + 1900,
+          date.tm_mon + 1, date.tm_mday, date.tm_hour, date.tm_min,
+          date.tm_sec, cursor);
 #else
-      printf("%s %d %04d-%02d-%02d %02d:%02d:%02d %c%02d%02d %s\n",
-          facility, level, date.tm_year + 1900, date.tm_mon + 1,
-          date.tm_mday, date.tm_hour, date.tm_min, date.tm_sec,
-          date.tm_gmtoff < 0 ? '-' : '+', abs(date.tm_gmtoff / 3600),
-          abs(date.tm_gmtoff / 60 % 60), cursor);
+      printf("%u %u %u %s %u %04u-%02u-%02u %02u:%02u:%02u %c%02u%02u %s\n",
+          id.pid, id.uid, id.gid, facility, level, date.tm_year + 1900,
+          date.tm_mon + 1, date.tm_mday, date.tm_hour, date.tm_min,
+          date.tm_sec, date.tm_gmtoff < 0 ? '-' : '+',
+          abs(date.tm_gmtoff / 3600), abs(date.tm_gmtoff / 60 % 60), cursor);
 #endif
     }
     cursor += strlen(cursor) + 1;
@@ -182,11 +205,11 @@ int kernel_print(char *line) {
 
   if (line[start]) {
 #if UTC
-    printf("%s %d %04d-%02d-%02d %02d:%02d:%02d %s\n", facility, level,
+    printf("0 0 0 %s %u %04u-%02u-%02u %02u:%02u:%02u %s\n", facility, level,
         date.tm_year + 1900, date.tm_mon + 1, date.tm_mday, date.tm_hour,
         date.tm_min, date.tm_sec, line + start);
 #else
-    printf("%s %d %04d-%02d-%02d %02d:%02d:%02d %c%02d%02d %s\n",
+    printf("0 0 0 %s %u %04u-%02u-%02u %02u:%02u:%02u %c%02u%02u %s\n",
         facility, level, date.tm_year + 1900, date.tm_mon + 1,
         date.tm_mday, date.tm_hour, date.tm_min, date.tm_sec,
         date.tm_gmtoff < 0 ? '-' : '+', abs(date.tm_gmtoff / 3600),
@@ -227,6 +250,7 @@ size_t kernel_read(int fd, char *data, size_t *length, size_t size) {
 }
 
 int main(int argc, char **argv) {
+  int one = 1;
   struct pollfd fds[2];
   struct sockaddr_un addr;
 
@@ -260,8 +284,11 @@ int main(int argc, char **argv) {
   snprintf(addr.sun_path, sizeof(addr.sun_path), "%s", SYSLOG);
   unlink(addr.sun_path);
   umask(0111); /* Syslog socket should be writeable by everyone. */
-  if (bind(fds[1].fd, (struct sockaddr *) &addr, sizeof(addr)))
+  if (bind(fds[1].fd, (struct sockaddr *) &addr, sizeof(addr)) < 0)
     err(EXIT_FAILURE, "bind %s", addr.sun_path);
+
+  if (setsockopt(fds[1].fd, SOL_SOCKET, SO_PASSCRED, &one, sizeof(one)) < 0)
+    err(EXIT_FAILURE, "setsockopt SO_PASSCRED");
 
   fds[0].events = fds[1].events = POLLIN;
   while(1) {

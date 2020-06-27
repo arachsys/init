@@ -150,10 +150,19 @@ void syslog_recv(int fd, char *data, size_t size) {
   while (cursor < data + length) {
     cursor += syslog_priority(cursor, &facility, &level);
     cursor += syslog_date(cursor, &date);
-    if (*cursor)
+    if (*cursor) {
+#if UTC
       printf("%s %d %04d-%02d-%02d %02d:%02d:%02d %s\n", facility, level,
           date.tm_year + 1900, date.tm_mon + 1, date.tm_mday, date.tm_hour,
           date.tm_min, date.tm_sec, cursor);
+#else
+      printf("%s %d %04d-%02d-%02d %02d:%02d:%02d %c%02d%02d %s\n",
+          facility, level, date.tm_year + 1900, date.tm_mon + 1,
+          date.tm_mday, date.tm_hour, date.tm_min, date.tm_sec,
+          date.tm_gmtoff < 0 ? '-' : '+', abs(date.tm_gmtoff / 3600),
+          abs(date.tm_gmtoff / 60 % 60), cursor);
+#endif
+    }
     cursor += strlen(cursor) + 1;
   }
   fflush(stdout);
@@ -171,10 +180,19 @@ int kernel_print(char *line) {
   facility = syslog_facility(LOG_KERN), level = LOG_NOTICE;
   start = syslog_priority(line, &facility, &level);
 
-  if (line[start])
+  if (line[start]) {
+#if UTC
     printf("%s %d %04d-%02d-%02d %02d:%02d:%02d %s\n", facility, level,
         date.tm_year + 1900, date.tm_mon + 1, date.tm_mday, date.tm_hour,
         date.tm_min, date.tm_sec, line + start);
+#else
+    printf("%s %d %04d-%02d-%02d %02d:%02d:%02d %c%02d%02d %s\n",
+        facility, level, date.tm_year + 1900, date.tm_mon + 1,
+        date.tm_mday, date.tm_hour, date.tm_min, date.tm_sec,
+        date.tm_gmtoff < 0 ? '-' : '+', abs(date.tm_gmtoff / 3600),
+        abs(date.tm_gmtoff / 60 % 60), line + start);
+#endif
+  }
 
   return start;
 }

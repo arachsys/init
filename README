@@ -119,13 +119,14 @@ syslog and syslogd
 This little system logger daemon takes a different approach to its
 mainstream competitors, more in keeping with the Unix 'toolkit' philosophy.
 
-syslog reads messages as they arrive at /var/log and /proc/kmsg, printing
+syslog reads messages as they arrive at /dev/log and /proc/kmsg, printing
 them to stdout in a format chosen for ease of handling in a shell-script
 read loop. For convenience, if syslog is provided with arguments, it will
 run them as a command in a child process and pipe its output to this command
 instead of stdout.
 
-Each line of output consists of five space-separated fields:
+By default, syslog is compiled with -DUTC=1 to select UTC timestamps. Each
+line of output then consists of five space-separated fields:
 
   - facility name: daemon, kern, authpriv, etc.
   - numeric log level from 0 (LOG_EMERG) to 7 (LOG_DEBUG)
@@ -133,14 +134,15 @@ Each line of output consists of five space-separated fields:
   - time in the 24-hour format HH:MM:SS
   - the log message itself
 
+When compiled with -DUTC=0, local time is used in place of UTC and the zone
+offset in the format +HHMM or -HHMM is included as an extra field between
+the time and the log message. This resolves any ambiguity with times during
+daylight saving changes.
+
 On glibc systems, syslog(3) sends datagrams to /dev/log with dates in the
 time zone of the calling process. On musl systems, these time stamps are
 always UTC. The right behaviour should be chosen automatically but can be
 explicitly configured at compile time with -DUTCLOG=0 or -DUTCLOG=1.
-
-By default, log lines are output in UTC unless compiled with -DUTC=0. Note
-that local time is ambiguous in time zones where daylight saving changes
-occur.
 
 A simple syslogd script which wraps syslog is installed with it, together
 with fsync and fdatasync programs which can be used to fsync() or

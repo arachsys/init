@@ -36,7 +36,7 @@ trap '(( RESTART )) && exec "$0" "$@" || rm -f "$PIDFILE"' EXIT
 echo $PPID >"$PIDFILE"
 exec 3>&-
 
-while read -r FACILITY LEVEL DATE TIME MESSAGE; do
+while read -r FACILITY LEVEL DATE ENTRY; do
   if (( LEVEL > 6 )); then
     FACILITY=debug
   elif [[ $FACILITY == auth* ]]; then
@@ -50,6 +50,6 @@ while read -r FACILITY LEVEL DATE TIME MESSAGE; do
     mkdir -m 0700 -p "$LOGDIR/$FACILITY"
   fi
 
-  echo "$TIME $MESSAGE" >>"$LOGDIR/$FACILITY/$DATE"
+  echo "$ENTRY" >>"$LOGDIR/$FACILITY/$DATE"
   (( FDATASYNC )) && fdatasync "$LOGDIR/$FACILITY/$DATE"
 done

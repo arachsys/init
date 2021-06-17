@@ -26,8 +26,8 @@ starting the command. (Typically this is used with pidfiles or unix sockets
 in /run.)
 
 
-init
-----
+init and reap
+-------------
 
 Previous versions of this collection provided a minimal /bin/init, which
 launched an /etc/rc.startup script at boot, reaped orphans while waiting for
@@ -49,6 +49,13 @@ named pipe.
 A demonstration /etc/init is included in the examples/ subdirectory, along
 with an example /etc/fstab showing the required pseudo-filesystems and
 one-line scripts to trigger halt, poweroff and reboot actions.
+
+Sometimes a completely null init can be useful, such as for PID 1 in a PID
+namespace. The reap utility is intended to fill this role: it does nothing
+except explicitly ignore SIGCHLD to discard the exit status of adopted
+children and prevent them from becoming zombies. You could also exec it at
+the end of an /etc/init script if you'd prefer to avoid a long-running
+shell process as system init.
 
 
 pivot

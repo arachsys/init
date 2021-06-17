@@ -2,12 +2,12 @@ PREFIX =
 BINDIR = ${PREFIX}/bin
 DESTDIR =
 
-CC = gcc
+CC = cc
 CFLAGS = -Os -Wall -pedantic -std=gnu99
 LDFLAGS =
 
 SCRIPTS = syslogd ueventd
-BINARIES = daemon pivot seal stop syslog uevent
+BINARIES = daemon pivot reap seal stop syslog uevent
 
 all: ${SCRIPTS} ${BINARIES}
 

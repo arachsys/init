@@ -20,7 +20,8 @@
 static struct {
   char **argv;
   id_t pid, gid, uid;
-  int chdir, killed, restart;
+  int killed, restart;
+  char *chdir;
 } command;
 
 static struct {
@@ -270,7 +271,7 @@ void usage(char *progname) {
   fprintf(stderr, "\
 Usage: %s [OPTIONS] CMD [ARG]...\n\
 Options:\n\
-  -c            change directory to the root before running the command\n\
+  -d DIR        change directory to DIR before running the command\n\
   -l TAG:PRI    redirect stdout and stderr to a logger subprocess,\n\
                   using syslog tag TAG and priority/facility PRI\n\
   -l LOGFILE    append stdout and stderr to a file LOGFILE, which must be\n\
@@ -310,11 +311,18 @@ int main(int argc, char **argv) {
   while (fd > STDERR_FILENO)
     close(fd--);
 
-  options = "+:cfl:p:ru:w:", waitargs = 0;
+  options = "+:cd:fl:p:ru:w:", waitargs = 0;
   while ((option = getopt(argc, argv, options)) > 0)
     switch (option) {
       case 'c':
-        command.chdir = 1;
+        /* Special case of -d DIR, for compatibility with BSD daemon(1). */
+        command.chdir = "/";
+        break;
+      case 'd':
+        command.chdir = optarg;
+        if ((fd = open(command.chdir, O_RDONLY | O_DIRECTORY)) < 0)
+          err(EXIT_FAILURE, "%s", command.chdir);
+        close(fd);
         break;
       case 'f':
         /* On by default; ignored for compatibility with BSD daemon(1). */
@@ -377,7 +385,7 @@ int main(int argc, char **argv) {
     close(pwd);
   }
 
-  if (command.chdir && chdir("/") < 0)
+  if (command.chdir && chdir(command.chdir) < 0)
     err(EXIT_FAILURE, "chdir");
 
   command.argv = argv + optind;

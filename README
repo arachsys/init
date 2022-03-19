@@ -15,15 +15,14 @@ building-block for simple dependency-based parallel execution during system
 boot.
 
 Its basic purpose is to detach from the controlling terminal and execute a
-command (specified by its arguments) as a background daemon. In common with
-the original, it has options to change to the root directory before
-starting, to lock, write and remove a pidfile on behalf of the command, to
-restart the command when it exits, and to drop privileges to a different
-user and group before execution. This version can also start a logger
-process to send output to syslog and uses inotify to implement simple
-dependencies, waiting for specified filesystem paths to be created before
-starting the command. (Typically this is used with pidfiles or unix sockets
-in /run.)
+specified command as a background daemon. In common with the original, it
+has options to change directory before starting, to lock, write and remove
+a pidfile on behalf of the command, to restart the command when it exits,
+and to drop privileges to a different user and group before execution. This
+version can also start a logger process to send output to syslog and uses
+inotify to implement simple dependencies, waiting for specified filesystem
+paths to be created before starting the command. (Typically this is used
+with pidfiles or unix sockets in /run.)
 
 
 init and reap

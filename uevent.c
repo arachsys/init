@@ -61,7 +61,7 @@ void subprocess(char **argv) {
 
 int main(int argc, char **argv) {
   char buffer[BUFFER + 1], *cursor, *separator;
-  int sock;
+  int sock, socksize = 1 << 21;
   ssize_t length;
   struct sockaddr_nl addr;
 
@@ -76,13 +76,20 @@ int main(int argc, char **argv) {
   if ((sock = socket(PF_NETLINK, SOCK_DGRAM, NETLINK_KOBJECT_UEVENT)) < 0)
     err(EXIT_FAILURE, "socket");
 
+  setsockopt(sock, SOL_SOCKET, SO_RCVBUF, &socksize, sizeof(int));
+  setsockopt(sock, SOL_SOCKET, SO_RCVBUFFORCE, &socksize, sizeof(int));
+
   if (bind(sock, (struct sockaddr *) &addr, sizeof(addr)) < 0)
     err(EXIT_FAILURE, "bind");
 
   while (1) {
     if ((length = recv(sock, &buffer, sizeof(buffer) - 1, 0)) < 0) {
-      if (errno != EAGAIN && errno != EINTR)
+      if (errno == ENOBUFS) {
+        printf("ACTION overflow\n\n");
+        fflush(stdout);
+      } else if (errno != EAGAIN && errno != EINTR) {
         err(EXIT_FAILURE, "recv");
+      }
       continue;
     }
 

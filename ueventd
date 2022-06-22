@@ -68,16 +68,16 @@ while read -r KEY VALUE; do
   fi
 
   unset ACTION DEVNAME DEVPATH DRIVER INTERFACE KEY SUBSYSTEM SYSPATH VALUE
-  [[ -n ${ENV[ACTION]+defined} ]] && ACTION=${ENV[ACTION]}
-  [[ -n ${ENV[DEVNAME]+defined} ]] && DEVNAME=${ENV[DEVNAME]}
-  [[ -n ${ENV[DEVPATH]+defined} ]] && DEVPATH=${ENV[DEVPATH]}
-  [[ -n ${ENV[DRIVER]+defined} ]] && DRIVER=${ENV[DRIVER]}
-  [[ -n ${ENV[INTERFACE]+defined} ]] && DRIVER=${ENV[INTERFACE]}
-  [[ -n ${ENV[SUBSYSTEM]+defined} ]] && SUBSYSTEM=${ENV[SUBSYSTEM]}
-  [[ -n ${ENV[DEVPATH]+defined} ]] && SYSPATH=$SYSFS${ENV[DEVPATH]}
+  [[ -v ENV[ACTION] ]] && ACTION=${ENV[ACTION]}
+  [[ -v ENV[DEVNAME] ]] && DEVNAME=${ENV[DEVNAME]}
+  [[ -v ENV[DEVPATH] ]] && DEVPATH=${ENV[DEVPATH]}
+  [[ -v ENV[DRIVER] ]] && DRIVER=${ENV[DRIVER]}
+  [[ -v ENV[INTERFACE] ]] && DRIVER=${ENV[INTERFACE]}
+  [[ -v ENV[SUBSYSTEM] ]] && SUBSYSTEM=${ENV[SUBSYSTEM]}
+  [[ -v ENV[DEVPATH] ]] && SYSPATH=$SYSFS${ENV[DEVPATH]}
 
   case $ACTION in
-    add | change | move | offline | online | remove)
+    add | change | move | offline | online | overflow | remove)
       event $ACTION $DEVPATH && $ACTION $DEVPATH
       ;;
   esac

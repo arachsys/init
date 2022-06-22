@@ -1,14 +1,18 @@
 #!/bin/bash
 
+CONFFILE=/etc/syslogd.conf
 DATASYNC=0
 LOGDIR=/var/log
 PIDFILE=/run/syslogd.pid
 RESTART=0
 
-while getopts :d:p:s OPTION; do
+while getopts :d:f:p:s OPTION; do
   case $OPTION in
     d)
       LOGDIR=$OPTARG
+      ;;
+    f)
+      CONFFILE=$OPTARG
       ;;
     p)
       PIDFILE=$OPTARG
@@ -18,6 +22,29 @@ while getopts :d:p:s OPTION; do
       ;;
   esac
 done
+
+classify() {
+  if (( LEVEL > 6 )); then
+    FACILITY=debug
+  elif [[ $FACILITY == auth* ]]; then
+    FACILITY=auth
+  elif [[ $FACILITY != @(kern|mail) ]]; then
+    FACILITY=daemon
+  fi
+}
+
+log() {
+  if [[ ! -d $LOGDIR/$FACILITY ]]; then
+    [[ $FACILITY == debug ]] && return
+    mkdir -m 0700 -p "$LOGDIR/$FACILITY"
+  fi
+  echo "$ENTRY" >>"$LOGDIR/$FACILITY/$DATE"
+  (( DATASYNC )) && sync -d "$LOGDIR/$FACILITY/$DATE"
+}
+
+if [[ -f $CONFFILE ]] && ! source "$CONFFILE"; then
+  exit 1
+fi
 
 if [[ ${*:$OPTIND} != "-" ]]; then
   if { exec 3>>"$PIDFILE" && flock -n 3; } 2>/dev/null; then
@@ -37,19 +64,5 @@ echo $PPID >"$PIDFILE"
 exec 3>&-
 
 while read -r PEERPID PEERUID PEERGID FACILITY LEVEL DATE ENTRY; do
-  if (( LEVEL > 6 )); then
-    FACILITY=debug
-  elif [[ $FACILITY == auth* ]]; then
-    FACILITY=auth
-  elif [[ $FACILITY != kern && $FACILITY != mail ]]; then
-    FACILITY=daemon
-  fi
-
-  if [[ ! -d $LOGDIR/$FACILITY ]]; then
-    [[ $FACILITY == debug ]] && continue
-    mkdir -m 0700 -p "$LOGDIR/$FACILITY"
-  fi
-
-  echo "$ENTRY" >>"$LOGDIR/$FACILITY/$DATE"
-  (( DATASYNC )) && sync -d "$LOGDIR/$FACILITY/$DATE"
+  classify && log
 done

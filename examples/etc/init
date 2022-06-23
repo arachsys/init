@@ -2,14 +2,14 @@
 
 set -o pipefail
 shopt -s dotglob extglob nullglob
-
 export PATH=/bin
+
 hostname example
 
 mount -a -n -t proc
 mount -a -n -t cgroup2,devtmpfs,sysfs,tmpfs
 mkdir -p /dev/pts && mount -a -n -t devpts
-mkdir -m 0755 -p /run/empty
+mkdir -m 0755 -p /run/empty && mount -r -B /run/empty /run/empty
 mkdir -m 1777 -p /run/lock /run/shm
 
 ln -f -n -s /proc/self/fd /dev/fd
@@ -17,23 +17,40 @@ ln -f -n -s fd/0 /dev/stdin
 ln -f -n -s fd/1 /dev/stdout
 ln -f -n -s fd/2 /dev/stderr
 
+if ZRAM=$(zramctl -f -s 1G); then
+  mkswap $ZRAM >/dev/null
+  swapon -d $ZRAM
+fi
+
 mount -n -o remount,ro /
-fsck -a -A -P -T >/dev/null || [[ $? -le 1 ]] || exec bash
+fsck -a -A -P -T >/dev/null
+if [[ $? -gt 1 ]]; then
+  sulogin -p /dev/console
+  sync && exec stop reboot
+fi
 mount -o remount,rw /
 mount -a -t nonfs
-swapon -a -e
+
+if [[ -c /dev/watchdog ]] && exec >/dev/watchdog; then
+  trap 'printf V && exit' TERM
+  while printf '\0'; do read -t 15; done
+fi <><(:) & disown
+
+for TTY in /dev/tty[1-6]; do
+  daemon -c -r agetty ${TTY#/dev/}
+done
 
 ip link set lo up
 ip link set eth0 up
 ip address add 192.168.1.2/24 dev eth0
 ip route add default via 192.168.1.1
 
-[[ -d /var/log ]] && syslogd -s
-[[ -f /etc/ssh/sshd_config ]] && ssh-keygen -A && $(type -P sshd)
+syslogd -s
+ssh-keygen -A && $(type -P sshd)
 
 # Start other daemons here
 
-[[ -r /dev/initctl ]] || mkfifo -m 0600 /dev/initctl
+mkfifo -m 0600 /dev/initctl
 ctrlaltdel soft && trap reboot INT
 while read -d '' -r MESSAGE; do
   [[ $MESSAGE == @(halt|poweroff|reboot) ]] && break
@@ -43,6 +60,5 @@ done <>/dev/initctl
 # Gracefully shut down daemons here
 
 kill -TERM -1 && sleep 5 && kill -KILL -1
-swapoff -a
-umount -a -r -t nodevtmpfs,noproc,noramfs,nosysfs,notmpfs
-exec stop "$MESSAGE"
+swapoff -a && umount -a -r
+sync && exec stop "$MESSAGE"

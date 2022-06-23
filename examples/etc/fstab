@@ -5,3 +5,4 @@ proc /proc proc defaults 0 0
 tmpfs /run tmpfs mode=0755 0 0
 sysfs /sys sysfs defaults 0 0
 cgroup2 /sys/fs/cgroup cgroup2 defaults 0 0
+tmpfs /tmp tmpfs mode=1777 0 0

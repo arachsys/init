@@ -1,22 +1,20 @@
-PREFIX =
-BINDIR = ${PREFIX}/bin
-DESTDIR =
+BINDIR := $(PREFIX)/bin
+CFLAGS := -Os -Wall -Wfatal-errors
 
-CC = cc
-CFLAGS = -Os -Wall -pedantic -std=gnu99
-LDFLAGS =
+SCRIPTS := syslogd ueventd
+BINARIES := daemon pivot reap seal stop syslog uevent
 
-SCRIPTS = syslogd ueventd
-BINARIES = daemon pivot reap seal stop syslog uevent
+%:: %.c Makefile
+	$(CC) $(CFLAGS) -o $@ $(filter %.c,$^)
 
-all: ${SCRIPTS} ${BINARIES}
+all: $(SCRIPTS) $(BINARIES)
 
-install: ${SCRIPTS} ${BINARIES}
-	mkdir -p ${DESTDIR}${BINDIR}
-	install -s ${BINARIES} ${DESTDIR}${BINDIR}
-	install ${SCRIPTS} ${DESTDIR}${BINDIR}
+install: $(SCRIPTS) $(BINARIES)
+	mkdir -p $(DESTDIR)$(BINDIR)
+	install -s $(BINARIES) $(DESTDIR)$(BINDIR)
+	install $(SCRIPTS) $(DESTDIR)$(BINDIR)
 
 clean:
-	rm -f ${BINARIES}
+	rm -f $(BINARIES)
 
-.PHONY: install clean
+.PHONY: all install clean

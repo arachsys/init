@@ -34,7 +34,7 @@ static struct {
   int file;
 } pidfile;
 
-void await(const char *path, int inotify, int parent) {
+static void await(const char *path, int inotify, int parent) {
   char *slash;
   int watch;
   struct inotify_event *event;
@@ -107,7 +107,7 @@ out:
   inotify_rm_watch(inotify, watch);
 }
 
-void handler(int sig) {
+static void handler(int sig) {
   /* Don't restart command after SIGTERM. */
   if (sig == SIGTERM)
     command.restart = 0;
@@ -118,7 +118,7 @@ void handler(int sig) {
   }
 }
 
-void logger_setup(const char *spec) {
+static void logger_setup(const char *spec) {
   int status;
   pid_t pid;
 
@@ -167,7 +167,7 @@ void logger_setup(const char *spec) {
     exit(EXIT_FAILURE);
 }
 
-void logger_start(void) {
+static void logger_start(void) {
   int logpipe[2];
 
   /* Redirect stdout and stderr to /dev/null if logging isn't configured. */
@@ -219,14 +219,14 @@ void logger_start(void) {
   close(logpipe[1]);
 }
 
-void pidfile_close(void) {
+static void pidfile_close(void) {
   if (pidfile.path) {
     close(pidfile.file);
     unlink(pidfile.path);
   }
 }
 
-void pidfile_open(const char *path) {
+static void pidfile_open(const char *path) {
   pidfile.file = open(path, O_RDWR | O_CLOEXEC | O_CREAT, 0666);
   if (pidfile.file < 0)
     err(EXIT_FAILURE, "%s", path);
@@ -238,7 +238,7 @@ void pidfile_open(const char *path) {
   ftruncate(pidfile.file, 0);
 }
 
-void pidfile_write(void) {
+static void pidfile_write(void) {
   char *pid;
   int length;
 
@@ -252,7 +252,7 @@ void pidfile_write(void) {
   }
 }
 
-void user_setup(char *name) {
+static void user_setup(char *name) {
   int count, tail;
   struct passwd *user;
 
@@ -267,7 +267,7 @@ void user_setup(char *name) {
   }
 }
 
-void usage(char *progname) {
+static void usage(char *progname) {
   fprintf(stderr, "\
 Usage: %s [OPTIONS] CMD [ARG]...\n\
 Options:\n\

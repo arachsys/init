@@ -14,14 +14,14 @@
 
 static pid_t pid;
 
-void handler(int sig) {
+static void handler(int sig) {
   if (pid > 0)
     kill(pid, sig);
   if (sig == SIGTERM)
     exit(EXIT_SUCCESS);
 }
 
-void subprocess(char **argv) {
+static void subprocess(char **argv) {
   int eventpipe[2];
   struct sigaction action;
 

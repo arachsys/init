@@ -46,14 +46,14 @@
 static pid_t pid;
 static char *progname;
 
-void handler(int sig) {
+static void handler(int sig) {
   if (pid > 0)
     kill(pid, sig);
   if (sig == SIGTERM)
     exit(EXIT_SUCCESS);
 }
 
-void subprocess(char **argv) {
+static void subprocess(char **argv) {
   int logpipe[2];
   struct sigaction action;
 
@@ -91,7 +91,7 @@ void subprocess(char **argv) {
   argv[0] = NULL;
 }
 
-int syslog_date(char *line, struct tm *date) {
+static int syslog_date(char *line, struct tm *date) {
   char *cursor;
   time_t now, offset;
 
@@ -108,7 +108,7 @@ int syslog_date(char *line, struct tm *date) {
   return cursor ? cursor - line : 0;
 }
 
-char *syslog_facility(int priority) {
+static char *syslog_facility(int priority) {
   char *facility;
   int value;
 
@@ -119,7 +119,7 @@ char *syslog_facility(int priority) {
   return facility;
 }
 
-int syslog_priority(char *line, char **facility, int *level) {
+static int syslog_priority(char *line, char **facility, int *level) {
   int priority, start;
 
   start = 0, sscanf(line, "<%d>%n", &priority, &start);
@@ -131,7 +131,7 @@ int syslog_priority(char *line, char **facility, int *level) {
   return start;
 }
 
-void syslog_recv(int fd, char *data, size_t size) {
+static void syslog_recv(int fd, char *data, size_t size) {
   char *cursor, *facility;
   int level, length;
   struct iovec block;
@@ -191,7 +191,7 @@ void syslog_recv(int fd, char *data, size_t size) {
   fflush(stdout);
 }
 
-int kernel_print(char *line) {
+static int kernel_print(char *line) {
   char *facility;
   int level, start;
   struct tm date;
@@ -220,7 +220,7 @@ int kernel_print(char *line) {
   return start;
 }
 
-size_t kernel_read(int fd, char *data, size_t *length, size_t size) {
+static size_t kernel_read(int fd, char *data, size_t *length, size_t size) {
   char *cursor;
   ssize_t new;
 

@@ -3,8 +3,10 @@
 #include <errno.h>
 #include <fcntl.h>
 #include <limits.h>
+#include <netdb.h>
+#include <poll.h>
 #include <pwd.h>
-#include <stdarg.h>
+#include <stddef.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -13,8 +15,10 @@
 #include <unistd.h>
 #include <sys/file.h>
 #include <sys/inotify.h>
+#include <sys/socket.h>
 #include <sys/stat.h>
 #include <sys/types.h>
+#include <sys/un.h>
 #include <sys/wait.h>
 
 static struct {
@@ -23,6 +27,11 @@ static struct {
   int killed, restart;
   char *chdir;
 } command;
+
+static struct {
+  size_t count;
+  struct pollfd *fd;
+} listeners;
 
 static struct {
   char *priority, *tag;
@@ -112,10 +121,85 @@ static void handler(int sig) {
   if (sig == SIGTERM)
     command.restart = 0;
   /* Pass on HUP, INT, USR1, USR2, TERM signals to our child process. */
-  if (command.pid > 0) {
-    command.killed = 1;
+  if (command.pid > 0)
     kill(command.pid, sig);
+  command.killed = 1;
+}
+
+static void listen_tcp(const char *address) {
+  struct addrinfo hints = { .ai_socktype = SOCK_STREAM }, *info, *list;
+  char host[256], port[32];
+  int fd, status;
+
+  if (sscanf(address, "[%255[^]]]:%31[^:]", host, port) != 2) {
+    if (sscanf(address, "%255[^:]:%31[^:]", host, port) != 2) {
+      if (sscanf(address, ":%31[^:]", port) != 1)
+        errx(EXIT_FAILURE, "%s: Invalid address", address);
+      snprintf(host, sizeof(host), "::");
+    }
   }
+
+  if ((status = getaddrinfo(host, port, &hints, &list)) != 0)
+    errx(EXIT_FAILURE, "getaddrinfo: %s", gai_strerror(status));
+
+  for (info = list; info != NULL; info = info->ai_next) {
+    if ((fd = socket(info->ai_family, info->ai_socktype, 0)) < 0)
+      err(EXIT_FAILURE, "socket");
+    setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &(int) { 1 }, sizeof(int));
+    fcntl(fd, F_SETFD, FD_CLOEXEC);
+    fcntl(fd, F_SETFL, O_NONBLOCK);
+
+    if (bind(fd, info->ai_addr, info->ai_addrlen) < 0)
+      err(EXIT_FAILURE, "bind");
+    if (listen(fd, SOMAXCONN) < 0)
+      err(EXIT_FAILURE, "listen");
+
+    if ((listeners.count & 15) == 0) {
+      listeners.fd = realloc(listeners.fd,
+        (listeners.count + 16) * sizeof(struct pollfd));
+      if (listeners.fd == NULL)
+        err(EXIT_FAILURE, "realloc");
+    }
+
+    listeners.fd[listeners.count].fd = fd;
+    listeners.fd[listeners.count].events = POLLIN;
+    listeners.count++;
+  }
+}
+
+static void listen_unix(const char *path) {
+  struct sockaddr_un address;
+  size_t length = strlen(path);
+  int fd;
+
+  if (length > sizeof(address.sun_path))
+    errx(EXIT_FAILURE, "Socket path is too long to bind");
+  length += offsetof(struct sockaddr_un, sun_path);
+
+  address.sun_family = AF_UNIX;
+  strncpy(address.sun_path, path, sizeof(address.sun_path));
+  unlink(path);
+
+  if ((fd = socket(AF_UNIX, SOCK_STREAM, 0)) < 0)
+    err(EXIT_FAILURE, "socket");
+  fcntl(fd, F_SETFD, FD_CLOEXEC);
+  fcntl(fd, F_SETFL, O_NONBLOCK);
+
+  if (bind(fd, (struct sockaddr *) &address, length) < 0)
+    err(EXIT_FAILURE, "bind");
+  if (listen(fd, SOMAXCONN) < 0)
+    err(EXIT_FAILURE, "listen");
+
+  if ((listeners.count & 15) == 0) {
+    listeners.fd = realloc(listeners.fd,
+      (listeners.count + 16) * sizeof(struct pollfd));
+    if (listeners.fd == NULL)
+      err(EXIT_FAILURE, "realloc");
+  }
+
+  listeners.fd[listeners.count].fd = fd;
+  listeners.fd[listeners.count].events = POLLIN;
+  listeners.count++;
 }
 
 static void logger_setup(const char *spec) {
@@ -252,6 +336,58 @@ static void pidfile_write(void) {
   }
 }
 
+static int serve(void) {
+  struct sigaction action;
+  int fd;
+
+  /* Ignore broken connections and handler commands exiting. */
+  signal(SIGPIPE, SIG_IGN);
+  signal(SIGCHLD, SIG_IGN);
+
+  /*  Clean up pidfile and exit on HUP, INT and TERM signals. */
+  sigfillset(&action.sa_mask);
+  action.sa_flags = SA_RESTART;
+  action.sa_handler = handler;
+  sigaction(SIGHUP, &action, NULL);
+  sigaction(SIGINT, &action, NULL);
+  sigaction(SIGTERM, &action, NULL);
+
+  while (command.killed == 0) {
+    if (poll(listeners.fd, listeners.count, -1) < 0) {
+      if (errno != EINTR && errno != EAGAIN)
+        err(EXIT_FAILURE, "poll");
+      continue;
+    }
+
+    for (size_t i = 0; i < listeners.count; i++)
+      if (listeners.fd[i].revents & POLLIN)
+        if ((fd = accept(listeners.fd[i].fd, NULL, NULL)) >= 0) {
+          fcntl(fd, F_SETFL, 0); /* Clear any inherited O_NONBLOCK. */
+          switch (fork()) {
+            case -1:
+              warn("fork");
+              close(fd);
+              continue;
+            case 0:
+              if (dup2(fd, STDIN_FILENO) < 0)
+                err(EXIT_FAILURE, "dup2");
+              if (dup2(fd, STDOUT_FILENO) < 0)
+                err(EXIT_FAILURE, "dup2");
+              close(fd);
+
+              if (command.gid > 0 && setgid(command.gid) < 0)
+                err(EXIT_FAILURE, "setgid");
+              if (command.uid > 0 && setuid(command.uid) < 0)
+                err(EXIT_FAILURE, "setuid");
+              execvp(command.argv[0], command.argv);
+              err(EXIT_FAILURE, "exec");
+          }
+          close(fd);
+        }
+  }
+  return EXIT_SUCCESS;
+}
+
 static void user_setup(char *name) {
   int count, tail;
   struct passwd *user;
@@ -279,6 +415,10 @@ Options:\n\
   -p PIDFILE    lock PIDFILE and write pid to it, removing it on exit\n\
   -r            supervise the running command, restarting it if it dies\n\
                   and passing on TERM, INT, HUP, USR1 and USR2 signals\n\
+  -s PATH       listen on a unix stream socket and run the command with\n\
+                  stdin and stdout attached to each connection\n\
+  -t HOST:PORT  listen on a TCP stream socket and run the command with\n\
+                  stdin and stdout attached to each connection\n\
   -u UID:GID    run the command with the specified numeric uid and gid\n\
   -u USERNAME   run the command with the uid and gid of user USERNAME\n\
   -w PATH       wait until PATH exists before running the command\n\
@@ -311,7 +451,7 @@ int main(int argc, char **argv) {
   while (fd > STDERR_FILENO)
     close(fd--);
 
-  options = "+:cd:fl:p:ru:w:", waitargs = 0;
+  options = "+:cd:fl:p:rs:t:u:w:", waitargs = 0;
   while ((option = getopt(argc, argv, options)) > 0)
     switch (option) {
       case 'c':
@@ -335,6 +475,12 @@ int main(int argc, char **argv) {
         break;
       case 'r':
         command.restart = 1;
+        break;
+      case 's':
+        listen_unix(optarg);
+        break;
+      case 't':
+        listen_tcp(optarg);
         break;
       case 'u':
         user_setup(optarg);
@@ -387,8 +533,11 @@ int main(int argc, char **argv) {
 
   if (command.chdir && chdir(command.chdir) < 0)
     err(EXIT_FAILURE, "chdir");
-
   command.argv = argv + optind;
+
+  if (listeners.count > 0)
+    return serve();
+
   if (!command.restart && !pidfile.path) {
     /* We don't need to supervise in this case, so just exec. */
     if (command.gid > 0 && setgid(command.gid) < 0)

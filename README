@@ -18,11 +18,16 @@ Its basic purpose is to detach from the controlling terminal and execute a
 specified command as a background daemon. In common with the original, it
 has options to change directory before starting, to lock, write and remove
 a pidfile on behalf of the command, to restart the command when it exits,
-and to drop privileges to a different user and group before execution. This
-version can also start a logger process to send output to syslog and uses
-inotify to implement simple dependencies, waiting for specified filesystem
-paths to be created before starting the command. (Typically this is used
-with pidfiles or unix sockets in /run.)
+and to drop privileges to a different user and group before execution.
+
+This version can also start a logger process to send output to syslog and
+uses inotify to implement simple dependencies, waiting for specified
+filesystem paths to be created before starting the command. (Typically this
+is used with pidfiles or unix sockets in /run.)
+
+A simple subset of traditional inetd or tcpserver functionality is also
+available: daemon can listen on TCP or unix stream sockets and run the
+specified command as a handler for each inbound connection.
 
 
 init and reap

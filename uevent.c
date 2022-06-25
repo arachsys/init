@@ -18,12 +18,11 @@ static void handler(int sig) {
   if (pid > 0)
     kill(pid, sig);
   if (sig == SIGTERM)
-    exit(EXIT_SUCCESS);
+    _exit(EXIT_SUCCESS);
 }
 
 static void subprocess(char **argv) {
   int eventpipe[2];
-  struct sigaction action;
 
   if (pipe(eventpipe) < 0)
     err(EXIT_FAILURE, "pipe");
@@ -47,14 +46,11 @@ static void subprocess(char **argv) {
   close(eventpipe[1]);
 
   /* Pass on HUP, INT, TERM, USR1, USR2 signals, and exit on SIGTERM. */
-  sigfillset(&action.sa_mask);
-  action.sa_flags = SA_RESTART;
-  action.sa_handler = handler;
-  sigaction(SIGHUP, &action, NULL);
-  sigaction(SIGINT, &action, NULL);
-  sigaction(SIGTERM, &action, NULL);
-  sigaction(SIGUSR1, &action, NULL);
-  sigaction(SIGUSR2, &action, NULL);
+  signal(SIGHUP, handler);
+  signal(SIGINT, handler);
+  signal(SIGTERM, handler);
+  signal(SIGUSR1, handler);
+  signal(SIGUSR2, handler);
 
   argv[0] = NULL;
 }

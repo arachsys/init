@@ -50,12 +50,11 @@ static void handler(int sig) {
   if (pid > 0)
     kill(pid, sig);
   if (sig == SIGTERM)
-    exit(EXIT_SUCCESS);
+    _exit(EXIT_SUCCESS);
 }
 
 static void subprocess(char **argv) {
   int logpipe[2];
-  struct sigaction action;
 
   if (pipe(logpipe) < 0)
     err(EXIT_FAILURE, "pipe");
@@ -79,14 +78,11 @@ static void subprocess(char **argv) {
   close(logpipe[1]);
 
   /* Pass on HUP, INT, TERM, USR1, USR2 signals, and exit on SIGTERM. */
-  sigfillset(&action.sa_mask);
-  action.sa_flags = SA_RESTART;
-  action.sa_handler = handler;
-  sigaction(SIGHUP, &action, NULL);
-  sigaction(SIGINT, &action, NULL);
-  sigaction(SIGTERM, &action, NULL);
-  sigaction(SIGUSR1, &action, NULL);
-  sigaction(SIGUSR2, &action, NULL);
+  signal(SIGHUP, handler);
+  signal(SIGINT, handler);
+  signal(SIGTERM, handler);
+  signal(SIGUSR1, handler);
+  signal(SIGUSR2, handler);
 
   argv[0] = NULL;
 }
@@ -250,7 +246,6 @@ static size_t kernel_read(int fd, char *data, size_t *length, size_t size) {
 }
 
 int main(int argc, char **argv) {
-  int one = 1;
   struct pollfd fds[2];
   struct sockaddr_un addr;
 
@@ -287,7 +282,8 @@ int main(int argc, char **argv) {
   if (bind(fds[1].fd, (struct sockaddr *) &addr, sizeof(addr)) < 0)
     err(EXIT_FAILURE, "bind %s", addr.sun_path);
 
-  if (setsockopt(fds[1].fd, SOL_SOCKET, SO_PASSCRED, &one, sizeof(one)) < 0)
+  if (setsockopt(fds[1].fd, SOL_SOCKET, SO_PASSCRED, &(int) { 1 },
+        sizeof(int)) < 0)
     err(EXIT_FAILURE, "setsockopt SO_PASSCRED");
 
   fds[0].events = fds[1].events = POLLIN;

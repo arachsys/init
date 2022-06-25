@@ -21,26 +21,21 @@
 #include <sys/un.h>
 #include <sys/wait.h>
 
-static struct {
-  char **argv;
-  id_t pid, gid, uid;
-  int killed, restart;
-  char *chdir;
-} command;
+static id_t gid, uid;
+static pid_t command;
 
-static struct {
-  size_t count;
-  struct pollfd *fd;
-} listeners;
+static size_t listeners;
+static struct pollfd *pollfd;
+static int signals[2];
 
 static struct {
   char *priority, *tag;
-  int file;
+  int fd;
 } logger;
 
 static struct {
   char *path;
-  int file;
+  int fd;
 } pidfile;
 
 static void await(const char *path, int inotify, int parent) {
@@ -116,14 +111,13 @@ out:
   inotify_rm_watch(inotify, watch);
 }
 
-static void handler(int sig) {
-  /* Don't restart command after SIGTERM. */
-  if (sig == SIGTERM)
-    command.restart = 0;
-  /* Pass on HUP, INT, USR1, USR2, TERM signals to our child process. */
-  if (command.pid > 0)
-    kill(command.pid, sig);
-  command.killed = 1;
+static void listen_add(int fd) {
+  if ((listeners & 15) == 0) {
+    pollfd = realloc(pollfd, (listeners + 16) * sizeof(struct pollfd));
+    if (pollfd == NULL)
+      err(EXIT_FAILURE, "realloc");
+  }
+  pollfd[listeners++].fd = fd;
 }
 
 static void listen_tcp(const char *address) {
@@ -153,17 +147,7 @@ static void listen_tcp(const char *address) {
       err(EXIT_FAILURE, "bind");
     if (listen(fd, SOMAXCONN) < 0)
       err(EXIT_FAILURE, "listen");
-
-    if ((listeners.count & 15) == 0) {
-      listeners.fd = realloc(listeners.fd,
-        (listeners.count + 16) * sizeof(struct pollfd));
-      if (listeners.fd == NULL)
-        err(EXIT_FAILURE, "realloc");
-    }
-
-    listeners.fd[listeners.count].fd = fd;
-    listeners.fd[listeners.count].events = POLLIN;
-    listeners.count++;
+    listen_add(fd);
   }
 }
 
@@ -189,17 +173,7 @@ static void listen_unix(const char *path) {
     err(EXIT_FAILURE, "bind");
   if (listen(fd, SOMAXCONN) < 0)
     err(EXIT_FAILURE, "listen");
-
-  if ((listeners.count & 15) == 0) {
-    listeners.fd = realloc(listeners.fd,
-      (listeners.count + 16) * sizeof(struct pollfd));
-    if (listeners.fd == NULL)
-      err(EXIT_FAILURE, "realloc");
-  }
-
-  listeners.fd[listeners.count].fd = fd;
-  listeners.fd[listeners.count].events = POLLIN;
-  listeners.count++;
+  listen_add(fd);
 }
 
 static void logger_setup(const char *spec) {
@@ -215,10 +189,10 @@ static void logger_setup(const char *spec) {
 
   /* Logging to file indicated by absolute path. */
   if (*logger.tag == '/') {
-    logger.file = open(logger.tag, O_RDWR | O_APPEND | O_CREAT, 0666);
-    if (logger.file < 0)
+    logger.fd = open(logger.tag, O_RDWR | O_APPEND | O_CREAT, 0666);
+    if (logger.fd < 0)
       err(EXIT_FAILURE, "%s", logger.tag);
-    if (flock(logger.file, LOCK_EX | LOCK_NB) < 0)
+    if (flock(logger.fd, LOCK_EX | LOCK_NB) < 0)
       errx(EXIT_FAILURE, "%s already locked", logger.tag);
     return;
   }
@@ -265,12 +239,12 @@ static void logger_start(void) {
 
   /* Redirect stdout and stderr if a log file has been specified. */
   if (*logger.tag == '/') {
-    if (dup2(logger.file, STDOUT_FILENO) < 0)
+    if (dup2(logger.fd, STDOUT_FILENO) < 0)
       err(EXIT_FAILURE, "dup2");
-    if (dup2(logger.file, STDERR_FILENO) < 0)
+    if (dup2(logger.fd, STDERR_FILENO) < 0)
       err(EXIT_FAILURE, "dup2");
-    if (logger.file != STDOUT_FILENO && logger.file != STDERR_FILENO)
-      close(logger.file);
+    if (logger.fd != STDOUT_FILENO && logger.fd != STDERR_FILENO)
+      close(logger.fd);
     return;
   }
 
@@ -305,102 +279,155 @@ static void logger_start(void) {
 
 static void pidfile_close(void) {
   if (pidfile.path) {
-    close(pidfile.file);
+    close(pidfile.fd);
     unlink(pidfile.path);
   }
 }
 
 static void pidfile_open(const char *path) {
-  pidfile.file = open(path, O_RDWR | O_CLOEXEC | O_CREAT, 0666);
-  if (pidfile.file < 0)
+  pidfile.fd = open(path, O_RDWR | O_CLOEXEC | O_CREAT, 0666);
+  if (pidfile.fd < 0)
     err(EXIT_FAILURE, "%s", path);
-  if (flock(pidfile.file, LOCK_EX | LOCK_NB) < 0)
+  if (flock(pidfile.fd, LOCK_EX | LOCK_NB) < 0)
     errx(EXIT_FAILURE, "%s already locked", path);
   if (!(pidfile.path = realpath(path, NULL)))
     err(EXIT_FAILURE, "%s", path);
   atexit(pidfile_close);
-  ftruncate(pidfile.file, 0);
+  ftruncate(pidfile.fd, 0);
 }
 
 static void pidfile_write(void) {
-  char *pid;
-  int length;
-
-  if (pidfile.path) {
-    length = asprintf(&pid, "%ld\n", (long) getpid());
-    if (length < 0)
-      err(EXIT_FAILURE, "asprintf");
-    if (write(pidfile.file, pid, length) < 0)
-      err(EXIT_FAILURE, "write %s", pidfile.path);
-    free(pid);
-  }
+  if (pidfile.path && dprintf(pidfile.fd, "%d\n", getpid()) < 0)
+    err(EXIT_FAILURE, "dprintf");
 }
 
-static int serve(void) {
-  struct sigaction action;
-  int fd;
+static pid_t reap(int *status) {
+  pid_t child;
 
-  /* Ignore broken connections and handler commands exiting. */
-  signal(SIGPIPE, SIG_IGN);
-  signal(SIGCHLD, SIG_IGN);
+  while ((child = waitpid(-1, status, WNOHANG)) < 0)
+    if (errno != EINTR)
+      break;
+  return child > 0 ? child : 0;
+}
 
-  /*  Clean up pidfile and exit on HUP, INT and TERM signals. */
-  sigfillset(&action.sa_mask);
-  action.sa_flags = SA_RESTART;
-  action.sa_handler = handler;
-  sigaction(SIGHUP, &action, NULL);
-  sigaction(SIGINT, &action, NULL);
-  sigaction(SIGTERM, &action, NULL);
+static int signal_get(void) {
+  int signal = -1;
+  while (read(signals[0], &signal, sizeof(int)) < 0)
+    if (errno != EINTR)
+      break;
+  return signal;
+}
 
-  while (command.killed == 0) {
-    if (poll(listeners.fd, listeners.count, -1) < 0) {
+static void signal_put(int signal) {
+  while (write(signals[1], &signal, sizeof(int)) < 0)
+    if (errno != EINTR)
+      break;
+}
+
+static void execute(char **argv) {
+  if (gid > 0 && setgid(gid) < 0)
+    err(EXIT_FAILURE, "setgid");
+  if (uid > 0 && setuid(uid) < 0)
+    err(EXIT_FAILURE, "setuid");
+  execvp(argv[0], argv);
+  err(EXIT_FAILURE, "exec");
+}
+
+static int serve(char **argv, size_t limit) {
+  int connection;
+  size_t count = 0;
+
+  listen_add(signals[0]);
+  pollfd[listeners - 1].events = POLLIN;
+
+  while (1) {
+    /* Only listen for new connections when below the connection limit. */
+    for (size_t i = 0; i + 1 < listeners; i++)
+      pollfd[i].events = count < limit ? POLLIN : 0;
+
+    if (poll(pollfd, listeners, -1) < 0) {
       if (errno != EINTR && errno != EAGAIN)
         err(EXIT_FAILURE, "poll");
       continue;
     }
 
-    for (size_t i = 0; i < listeners.count; i++)
-      if (listeners.fd[i].revents & POLLIN)
-        if ((fd = accept(listeners.fd[i].fd, NULL, NULL)) >= 0) {
-          fcntl(fd, F_SETFL, 0); /* Clear any inherited O_NONBLOCK. */
+    /* Deal with signals first in case they free additional slots. */
+    if (pollfd[listeners - 1].revents & POLLIN)
+      switch (signal_get()) {
+        case SIGHUP:
+        case SIGPIPE:
+          break;
+        case SIGCHLD:
+          while (reap(NULL) > 0)
+            if (count > 0)
+              count--;
+          break;
+        default:
+          return EXIT_SUCCESS;
+      }
+
+    /* Accept connections from ready listeners until we hit our limit. */
+    for (size_t i = 0; i + 1 < listeners; i++)
+      if (pollfd[i].revents & POLLIN && count < limit)
+        if ((connection = accept(pollfd[i].fd, NULL, NULL)) >= 0) {
           switch (fork()) {
             case -1:
-              warn("fork");
-              close(fd);
-              continue;
+              break;
             case 0:
-              if (dup2(fd, STDIN_FILENO) < 0)
+              if (dup2(connection, STDIN_FILENO) < 0)
                 err(EXIT_FAILURE, "dup2");
-              if (dup2(fd, STDOUT_FILENO) < 0)
+              if (dup2(connection, STDOUT_FILENO) < 0)
                 err(EXIT_FAILURE, "dup2");
-              close(fd);
-
-              if (command.gid > 0 && setgid(command.gid) < 0)
-                err(EXIT_FAILURE, "setgid");
-              if (command.uid > 0 && setuid(command.uid) < 0)
-                err(EXIT_FAILURE, "setuid");
-              execvp(command.argv[0], command.argv);
-              err(EXIT_FAILURE, "exec");
+              close(connection);
+              execute(argv);
+            default:
+              count++;
           }
-          close(fd);
+          close(connection);
         }
   }
-  return EXIT_SUCCESS;
 }
 
-static void user_setup(char *name) {
-  int count, tail;
-  struct passwd *user;
+static int supervise(char **argv, int restart) {
+  int killed, signal;
+  pid_t child;
+  time_t started;
 
-  count = sscanf(name, "%u:%u%n", &command.uid, &command.gid, &tail);
-  if (count < 2 || optarg[tail]) {
-    if ((user = getpwnam(optarg))) {
-      command.uid = user->pw_uid;
-      command.gid = user->pw_gid;
-    } else {
-      errx(EXIT_FAILURE, "Invalid username");
+  do {
+    switch (command = fork()) {
+      case -1:
+        err(EXIT_FAILURE, "fork");
+      case 0:
+        setsid(); /* Ignore errors but should always work after fork. */
+        execute(argv);
     }
-  }
+
+    killed = 0, started = time(NULL);
+    while (command)
+      switch (signal = signal_get()) {
+        case SIGPIPE:
+          break;
+        case SIGCHLD:
+          /* Reap every child, watching out for the command pid. */
+          while ((child = reap(NULL)))
+            if (child == command)
+              command = 0;
+          break;
+        case SIGTERM:
+          restart = 0;
+          /* Fall through to the default behaviour. */
+        default:
+          /* Pass signals on to our child process. */
+          kill(command, signal);
+          killed = 1;
+      }
+
+    /* Try to avoid restarting a crashing command in a tight loop. */
+    if (restart && !killed && time(NULL) < started + 5)
+      errx(EXIT_FAILURE, "Child died within 5 seconds: not restarting");
+  } while (restart);
+
+  return EXIT_SUCCESS;
 }
 
 static void usage(char *progname) {
@@ -412,6 +439,7 @@ Options:\n\
                   using syslog tag TAG and priority/facility PRI\n\
   -l LOGFILE    append stdout and stderr to a file LOGFILE, which must be\n\
                   given as an absolute path whose first character is '/'\n\
+  -n LIMIT      allow no more than LIMIT concurrent socket connections\n\
   -p PIDFILE    lock PIDFILE and write pid to it, removing it on exit\n\
   -r            supervise the running command, restarting it if it dies\n\
                   and passing on TERM, INT, HUP, USR1 and USR2 signals\n\
@@ -427,11 +455,10 @@ Options:\n\
 }
 
 int main(int argc, char **argv) {
-  char *options, *path;
-  int fd, inotify, option, pwd, waitargs;
-  pid_t pid;
-  time_t started;
-  struct sigaction action;
+  char *dir = NULL, *options, *path;
+  int fd, inotify, option, pwd, tail, waitargs;
+  size_t limit = -1, restart = 0;
+  struct passwd *user;
 
   /* Redirect stdin from /dev/null. */
   if ((fd = open("/dev/null", O_RDWR)) < 0)
@@ -451,17 +478,17 @@ int main(int argc, char **argv) {
   while (fd > STDERR_FILENO)
     close(fd--);
 
-  options = "+:cd:fl:p:rs:t:u:w:", waitargs = 0;
+  options = "+:cd:fl:n:p:rs:t:u:w:", waitargs = 0;
   while ((option = getopt(argc, argv, options)) > 0)
     switch (option) {
       case 'c':
         /* Special case of -d DIR, for compatibility with BSD daemon(1). */
-        command.chdir = "/";
+        dir = "/";
         break;
       case 'd':
-        command.chdir = optarg;
-        if ((fd = open(command.chdir, O_RDONLY | O_DIRECTORY)) < 0)
-          err(EXIT_FAILURE, "%s", command.chdir);
+        dir = optarg;
+        if ((fd = open(dir, O_RDONLY | O_DIRECTORY)) < 0)
+          err(EXIT_FAILURE, "%s", dir);
         close(fd);
         break;
       case 'f':
@@ -470,11 +497,16 @@ int main(int argc, char **argv) {
       case 'l':
         logger_setup(optarg);
         break;
+      case 'n':
+        if (sscanf(optarg, "%zu%n", &limit, &tail) >= 1)
+          if (optarg[tail] == 0)
+            break;
+        errx(EXIT_FAILURE, "Invalid connection limit");
       case 'p':
         pidfile_open(optarg);
         break;
       case 'r':
-        command.restart = 1;
+        restart = 1;
         break;
       case 's':
         listen_unix(optarg);
@@ -483,8 +515,15 @@ int main(int argc, char **argv) {
         listen_tcp(optarg);
         break;
       case 'u':
-        user_setup(optarg);
-        break;
+        if (sscanf(optarg, "%u:%u%n", &uid, &gid, &tail) >= 2)
+          if (optarg[tail] == 0)
+            break;
+        if ((user = getpwnam(optarg))) {
+          uid = user->pw_uid;
+          gid = user->pw_gid;
+          break;
+        }
+        errx(EXIT_FAILURE, "Invalid username");
       case 'w':
         waitargs++;
         break;
@@ -499,7 +538,7 @@ int main(int argc, char **argv) {
     case -1:
       err(EXIT_FAILURE, "fork");
     case 0:
-      setsid(); /* This should work after forking; ignore errors anyway. */
+      setsid(); /* Ignore errors but should always work after fork. */
       break;
     default:
       _exit(EXIT_SUCCESS); /* Don't delete pidfile in atexit() handler. */
@@ -531,57 +570,27 @@ int main(int argc, char **argv) {
     close(pwd);
   }
 
-  if (command.chdir && chdir(command.chdir) < 0)
+  if (dir && chdir(dir) < 0)
     err(EXIT_FAILURE, "chdir");
-  command.argv = argv + optind;
 
-  if (listeners.count > 0)
-    return serve();
+  /* If we don't need to supervise it, just exec the command. */
+  if (!restart && !pidfile.path && !listeners)
+    execute(argv + optind);
 
-  if (!command.restart && !pidfile.path) {
-    /* We don't need to supervise in this case, so just exec. */
-    if (command.gid > 0 && setgid(command.gid) < 0)
-      err(EXIT_FAILURE, "setgid");
-    if (command.uid > 0 && setuid(command.uid) < 0)
-      err(EXIT_FAILURE, "setuid");
-    execvp(command.argv[0], command.argv);
-    err(EXIT_FAILURE, "exec");
-  }
+  /* Use a packet-mode signals pipe to avoid async-unsafe handlers. */
+  if (pipe2(signals, O_CLOEXEC | O_DIRECT) < 0)
+    err(EXIT_FAILURE, "pipe");
 
-  /* Handle and pass on HUP, INT, TERM, USR1, USR2 signals. */
-  sigfillset(&action.sa_mask);
-  action.sa_flags = SA_RESTART;
-  action.sa_handler = handler;
-  sigaction(SIGHUP, &action, NULL);
-  sigaction(SIGINT, &action, NULL);
-  sigaction(SIGTERM, &action, NULL);
-  sigaction(SIGUSR1, &action, NULL);
-  sigaction(SIGUSR2, &action, NULL);
+  /* Avoid using SIG_IGN as this disposition persists across exec. */
+  signal(SIGHUP, signal_put);
+  signal(SIGINT, signal_put);
+  signal(SIGPIPE, signal_put);
+  signal(SIGTERM, signal_put);
+  signal(SIGCHLD, signal_put);
+  signal(SIGUSR1, signal_put);
+  signal(SIGUSR2, signal_put);
 
-  do {
-    command.killed = 0; /* Have we signalled the child? */
-    switch (command.pid = fork()) {
-      case -1:
-        err(EXIT_FAILURE, "fork");
-      case 0:
-        if (command.gid > 0 && setgid(command.gid) < 0)
-          err(EXIT_FAILURE, "setgid");
-        if (command.uid > 0 && setuid(command.uid) < 0)
-          err(EXIT_FAILURE, "setuid");
-        setsid(); /* This should work after forking; ignore errors anyway. */
-        execvp(command.argv[0], command.argv);
-        err(EXIT_FAILURE, "exec");
-    }
-
-    started = time(NULL);
-    while (pid = wait(NULL), pid != (pid_t) command.pid)
-      if (pid < 0 && errno != EINTR)
-        err(EXIT_FAILURE, "wait");
-
-    /* Try to avoid restarting a crashing command in a tight loop. */
-    if (command.restart && !command.killed && time(NULL) < started + 5)
-      errx(EXIT_FAILURE, "Child died within 5 seconds: not restarting");
-  } while (command.restart);
-
-  return EXIT_SUCCESS;
+  if (listeners > 0)
+    return serve(argv + optind, limit);
+  return supervise(argv + optind, restart);
 }

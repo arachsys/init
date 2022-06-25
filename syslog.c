@@ -46,10 +46,10 @@
 static pid_t pid;
 static char *progname;
 
-static void handler(int sig) {
-  if (pid > 0)
-    kill(pid, sig);
-  if (sig == SIGTERM)
+static void handler(int signal) {
+  if (signal != SIGPIPE && pid > 0)
+    kill(pid, signal);
+  if (signal == SIGPIPE || signal == SIGTERM)
     _exit(EXIT_SUCCESS);
 }
 
@@ -77,9 +77,10 @@ static void subprocess(char **argv) {
   close(logpipe[0]);
   close(logpipe[1]);
 
-  /* Pass on HUP, INT, TERM, USR1, USR2 signals, and exit on SIGTERM. */
+  /* Pass on HUP, INT, TERM, USR1, USR2; exit on TERM or PIPE. */
   signal(SIGHUP, handler);
   signal(SIGINT, handler);
+  signal(SIGPIPE, handler);
   signal(SIGTERM, handler);
   signal(SIGUSR1, handler);
   signal(SIGUSR2, handler);

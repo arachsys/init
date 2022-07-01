@@ -22,8 +22,6 @@
 #include <sys/wait.h>
 
 static id_t gid, uid;
-static pid_t command;
-
 static size_t listeners;
 static struct pollfd *pollfd;
 static int signals[2];
@@ -311,15 +309,15 @@ static pid_t reap(int *status) {
 }
 
 static int signal_get(void) {
-  int signal = -1;
-  while (read(signals[0], &signal, sizeof(int)) < 0)
+  unsigned char signal = 0;
+  while (read(signals[0], &signal, 1) < 0)
     if (errno != EINTR)
       break;
   return signal;
 }
 
 static void signal_put(int signal) {
-  while (write(signals[1], &signal, sizeof(int)) < 0)
+  while (write(signals[1], &(unsigned char) { signal }, 1) < 0)
     if (errno != EINTR)
       break;
 }
@@ -354,15 +352,13 @@ static int serve(char **argv, size_t limit) {
     /* Deal with signals first in case they free additional slots. */
     if (pollfd[listeners - 1].revents & POLLIN)
       switch (signal_get()) {
-        case SIGHUP:
-        case SIGPIPE:
-          break;
         case SIGCHLD:
           while (reap(NULL) > 0)
             if (count > 0)
               count--;
           break;
-        default:
+        case SIGINT:
+        case SIGTERM:
           return EXIT_SUCCESS;
       }
 
@@ -389,9 +385,9 @@ static int serve(char **argv, size_t limit) {
 }
 
 static int supervise(char **argv, int restart) {
-  int killed, signal;
-  pid_t child;
-  time_t started;
+  int signal;
+  pid_t child, command;
+  time_t wait;
 
   do {
     switch (command = fork()) {
@@ -402,11 +398,9 @@ static int supervise(char **argv, int restart) {
         execute(argv);
     }
 
-    killed = 0, started = time(NULL);
+    wait = time(NULL) + 5;
     while (command)
       switch (signal = signal_get()) {
-        case SIGPIPE:
-          break;
         case SIGCHLD:
           /* Reap every child, watching out for the command pid. */
           while ((child = reap(NULL)))
@@ -416,14 +410,17 @@ static int supervise(char **argv, int restart) {
         case SIGTERM:
           restart = 0;
           /* Fall through to the default behaviour. */
-        default:
+        case SIGHUP:
+        case SIGINT:
+        case SIGUSR1:
+        case SIGUSR2:
           /* Pass signals on to our child process. */
           kill(command, signal);
-          killed = 1;
+          wait = 0;
       }
 
     /* Try to avoid restarting a crashing command in a tight loop. */
-    if (restart && !killed && time(NULL) < started + 5)
+    if (restart && time(NULL) < wait)
       errx(EXIT_FAILURE, "Child died within 5 seconds: not restarting");
   } while (restart);
 
@@ -577,8 +574,8 @@ int main(int argc, char **argv) {
   if (!restart && !pidfile.path && !listeners)
     execute(argv + optind);
 
-  /* Use a packet-mode signals pipe to avoid async-unsafe handlers. */
-  if (pipe2(signals, O_CLOEXEC | O_DIRECT) < 0)
+  /* Use a signals pipe to avoid async-unsafe handlers. */
+  if (pipe2(signals, O_CLOEXEC) < 0)
     err(EXIT_FAILURE, "pipe");
 
   /* Avoid using SIG_IGN as this disposition persists across exec. */

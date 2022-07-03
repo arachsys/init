@@ -206,7 +206,7 @@ static int kernel_print(char *line) {
         date.tm_year + 1900, date.tm_mon + 1, date.tm_mday, date.tm_hour,
         date.tm_min, date.tm_sec, line + start);
 #else
-    printf("0 0 0 %s %u %04u-%02u-%02u %02u:%02u:%02u %c%02u%02u %s\n",
+    printf("0 0 0 %s %u %04u-%02u-%02u %02u:%02u:%02u%c%02u%02u %s\n",
         facility, level, date.tm_year + 1900, date.tm_mon + 1,
         date.tm_mday, date.tm_hour, date.tm_min, date.tm_sec,
         date.tm_gmtoff < 0 ? '-' : '+', abs(date.tm_gmtoff / 3600),

@@ -38,7 +38,7 @@ log() {
     [[ $FACILITY == debug ]] && return
     mkdir -m 0700 -p "$LOGDIR/$FACILITY"
   fi
-  echo "$ENTRY" >>"$LOGDIR/$FACILITY/$DATE"
+  echo "$TIME $ENTRY" >>"$LOGDIR/$FACILITY/$DATE"
   (( DATASYNC )) && sync -d "$LOGDIR/$FACILITY/$DATE"
 }
 
@@ -63,6 +63,6 @@ trap '(( RESTART )) && exec "$0" "$@" || rm -f "$PIDFILE"' EXIT
 echo $PPID >"$PIDFILE"
 exec 3>&-
 
-while read -r PEERPID PEERUID PEERGID FACILITY LEVEL DATE ENTRY; do
+while read -r PEERPID PEERUID PEERGID FACILITY LEVEL DATE TIME ENTRY; do
   classify && log
 done

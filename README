@@ -149,9 +149,8 @@ line of output then consists of eight space-separated fields:
   - the log message itself
 
 When compiled with -DUTC=0, local time is used in place of UTC and the zone
-offset in the format +HHMM or -HHMM is included as an extra field between
-the time and the log message. This resolves any ambiguity with times during
-daylight saving changes.
+offset in the format +HHMM or -HHMM is appended to the time field. This
+resolves any ambiguity with times during daylight saving changes.
 
 On glibc systems, syslog(3) sends datagrams to /dev/log with dates in the
 time zone of the calling process. On musl systems, these time stamps are

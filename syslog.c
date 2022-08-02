@@ -39,12 +39,8 @@
 #endif
 #endif
 
-#ifndef UTC
-#define UTC 1
-#endif
-
 static pid_t pid;
-static char *progname;
+static char *zone;
 
 static void handler(int signal) {
   if (signal != SIGPIPE && pid > 0)
@@ -101,7 +97,7 @@ static int syslog_date(char *line, struct tm *date) {
     now = (UTCLOG ? timegm : mktime)(date);
   }
 
-  (UTC ? gmtime_r : localtime_r)(&now, date);
+  (zone && zone[0] ? localtime_r : gmtime_r)(&now, date);
   return cursor ? cursor - line : 0;
 }
 
@@ -170,18 +166,18 @@ static void syslog_recv(int fd, char *data, size_t size) {
     cursor += syslog_priority(cursor, &facility, &level);
     cursor += syslog_date(cursor, &date);
     if (*cursor) {
-#if UTC
-      printf("%u %u %u %s %u %04u-%02u-%02u %02u:%02u:%02u %s\n", id.pid,
-          id.uid, id.gid, facility, level, date.tm_year + 1900,
-          date.tm_mon + 1, date.tm_mday, date.tm_hour, date.tm_min,
-          date.tm_sec, cursor);
-#else
-      printf("%u %u %u %s %u %04u-%02u-%02u %02u:%02u:%02u %c%02u%02u %s\n",
+      if (zone && zone[0])
+        printf("%u %u %u %s %u %04u-%02u-%02u %02u:%02u:%02u%c%02u%02u %s\n",
           id.pid, id.uid, id.gid, facility, level, date.tm_year + 1900,
           date.tm_mon + 1, date.tm_mday, date.tm_hour, date.tm_min,
           date.tm_sec, date.tm_gmtoff < 0 ? '-' : '+',
-          abs(date.tm_gmtoff / 3600), abs(date.tm_gmtoff / 60 % 60), cursor);
-#endif
+          abs((int) date.tm_gmtoff) / 3600,
+          abs((int) date.tm_gmtoff) / 60 % 60, cursor);
+      else
+        printf("%u %u %u %s %u %04u-%02u-%02u %02u:%02u:%02u %s\n", id.pid,
+          id.uid, id.gid, facility, level, date.tm_year + 1900,
+          date.tm_mon + 1, date.tm_mday, date.tm_hour, date.tm_min,
+          date.tm_sec, cursor);
     }
     cursor += strlen(cursor) + 1;
   }
@@ -195,23 +191,22 @@ static int kernel_print(char *line) {
   time_t now;
 
   time(&now);
-  (UTC ? gmtime_r : localtime_r)(&now, &date);
+  (zone && zone[0] ? localtime_r : gmtime_r)(&now, &date);
 
   facility = syslog_facility(LOG_KERN), level = LOG_NOTICE;
   start = syslog_priority(line, &facility, &level);
 
   if (line[start]) {
-#if UTC
-    printf("0 0 0 %s %u %04u-%02u-%02u %02u:%02u:%02u %s\n", facility, level,
-        date.tm_year + 1900, date.tm_mon + 1, date.tm_mday, date.tm_hour,
-        date.tm_min, date.tm_sec, line + start);
-#else
-    printf("0 0 0 %s %u %04u-%02u-%02u %02u:%02u:%02u%c%02u%02u %s\n",
+    if (zone && zone[0])
+      printf("0 0 0 %s %u %04u-%02u-%02u %02u:%02u:%02u%c%02u%02u %s\n",
         facility, level, date.tm_year + 1900, date.tm_mon + 1,
         date.tm_mday, date.tm_hour, date.tm_min, date.tm_sec,
-        date.tm_gmtoff < 0 ? '-' : '+', abs(date.tm_gmtoff / 3600),
-        abs(date.tm_gmtoff / 60 % 60), line + start);
-#endif
+        date.tm_gmtoff < 0 ? '-' : '+', abs((int) date.tm_gmtoff) / 3600,
+        abs((int) date.tm_gmtoff) / 60 % 60, line + start);
+    else
+      printf("0 0 0 %s %u %04u-%02u-%02u %02u:%02u:%02u %s\n", facility,
+        level, date.tm_year + 1900, date.tm_mon + 1, date.tm_mday,
+        date.tm_hour, date.tm_min, date.tm_sec, line + start);
   }
 
   return start;
@@ -260,7 +255,7 @@ int main(int argc, char **argv) {
     size_t size;
   } syslog;
 
-  progname = argv[0];
+  zone = getenv("TZ");
   if (argc > 1)
     subprocess(argv + 1);
 

@@ -6,23 +6,6 @@ LOGDIR=/var/log
 PIDFILE=/run/syslogd.pid
 RESTART=0
 
-while getopts :d:f:p:s OPTION; do
-  case $OPTION in
-    d)
-      LOGDIR=$OPTARG
-      ;;
-    f)
-      CONFFILE=$OPTARG
-      ;;
-    p)
-      PIDFILE=$OPTARG
-      ;;
-    s)
-      DATASYNC=1
-      ;;
-  esac
-done
-
 classify() {
   if (( LEVEL > 6 )); then
     FACILITY=debug
@@ -38,9 +21,32 @@ log() {
     [[ $FACILITY == debug ]] && return
     mkdir -m 0700 -p "$LOGDIR/$FACILITY"
   fi
-  echo "$TIME $ENTRY" >>"$LOGDIR/$FACILITY/$DATE"
+  printf '%s %s\n' "$TIME" "$ENTRY" >>"$LOGDIR/$FACILITY/$DATE"
   (( DATASYNC )) && sync -d "$LOGDIR/$FACILITY/$DATE"
 }
+
+while getopts :d:f:kp:s OPTION; do
+  case $OPTION in
+    d)
+      LOGDIR=$OPTARG
+      ;;
+    f)
+      CONFFILE=$OPTARG
+      ;;
+    k)
+      classify() (( PEERPID ))
+      log() {
+        printf '<%d>%s\n' $((LEVEL + 24)) "$ENTRY" >>/dev/kmsg
+      }
+      ;;
+    p)
+      PIDFILE=$OPTARG
+      ;;
+    s)
+      DATASYNC=1
+      ;;
+  esac
+done
 
 if [[ -f $CONFFILE ]] && ! source "$CONFFILE"; then
   exit 1

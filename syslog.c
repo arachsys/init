@@ -5,8 +5,6 @@
 #include <fcntl.h>
 #include <features.h>
 #include <poll.h>
-#include <signal.h>
-#include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -18,17 +16,7 @@
 #include <sys/socket.h>
 #include <sys/un.h>
 
-#ifndef BUFFER
 #define BUFFER 65536
-#endif
-
-#ifndef KERNEL
-#define KERNEL "/proc/kmsg"
-#endif
-
-#ifndef SYSLOG
-#define SYSLOG "/dev/log"
-#endif
 
 #ifndef UTCLOG
 /* syslog(3) time stamps are UTC from musl and local time from glibc. */
@@ -39,50 +27,7 @@
 #endif
 #endif
 
-static pid_t pid;
 static char *zone;
-
-static void handler(int signal) {
-  if (signal != SIGPIPE && pid > 0)
-    kill(pid, signal);
-  if (signal == SIGPIPE || signal == SIGTERM)
-    _exit(EXIT_SUCCESS);
-}
-
-static void subprocess(char **argv) {
-  int logpipe[2];
-
-  if (pipe(logpipe) < 0)
-    err(EXIT_FAILURE, "pipe");
-
-  signal(SIGCHLD, SIG_IGN);
-  switch (pid = fork()) {
-    case -1:
-      err(EXIT_FAILURE, "fork");
-    case 0:
-      if (dup2(logpipe[0], STDIN_FILENO) < 0)
-        err(EXIT_FAILURE, "dup2");
-      close(logpipe[0]);
-      close(logpipe[1]);
-      execvp(argv[0], argv);
-      err(EXIT_FAILURE, "exec");
-  }
-
-  if (dup2(logpipe[1], STDOUT_FILENO) < 0)
-    err(EXIT_FAILURE, "dup2");
-  close(logpipe[0]);
-  close(logpipe[1]);
-
-  /* Pass on HUP, INT, TERM, USR1, USR2; exit on TERM or PIPE. */
-  signal(SIGHUP, handler);
-  signal(SIGINT, handler);
-  signal(SIGPIPE, handler);
-  signal(SIGTERM, handler);
-  signal(SIGUSR1, handler);
-  signal(SIGUSR2, handler);
-
-  argv[0] = NULL;
-}
 
 static int syslog_date(char *line, struct tm *date) {
   char *cursor;
@@ -243,7 +188,10 @@ static size_t kernel_read(int fd, char *data, size_t *length, size_t size) {
 
 int main(int argc, char **argv) {
   struct pollfd fds[2];
-  struct sockaddr_un addr;
+  struct sockaddr_un addr = {
+    .sun_family = AF_UNIX,
+    .sun_path = "/dev/log"
+  };
 
   struct {
     char *data;
@@ -256,23 +204,18 @@ int main(int argc, char **argv) {
   } syslog;
 
   zone = getenv("TZ");
-  if (argc > 1)
-    subprocess(argv + 1);
 
   if (!(kernel.data = malloc(kernel.size = BUFFER + 1)))
     err(EXIT_FAILURE, "malloc");
   if (!(syslog.data = malloc(syslog.size = BUFFER + 1)))
     err(EXIT_FAILURE, "malloc");
 
-  if ((fds[0].fd = open(KERNEL, O_RDONLY)) < 0)
-    err(EXIT_FAILURE, "open %s", KERNEL);
+  if ((fds[0].fd = open("/proc/kmsg", O_RDONLY)) < 0)
+    err(EXIT_FAILURE, "open /proc/kmsg");
   kernel.length = 0;
 
   if ((fds[1].fd = socket(AF_UNIX, SOCK_DGRAM, 0)) < 0)
     err(EXIT_FAILURE, "socket");
-  memset(&addr, 0, sizeof(addr));
-  addr.sun_family = AF_UNIX;
-  snprintf(addr.sun_path, sizeof(addr.sun_path), "%s", SYSLOG);
   unlink(addr.sun_path);
   umask(0111); /* Syslog socket should be writeable by everyone. */
   if (bind(fds[1].fd, (struct sockaddr *) &addr, sizeof(addr)) < 0)

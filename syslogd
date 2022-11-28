@@ -52,22 +52,24 @@ if [[ -f $CONFFILE ]] && ! source "$CONFFILE"; then
   exit 1
 fi
 
-if [[ ${*:$OPTIND} != "-" ]]; then
-  if { exec 3>>"$PIDFILE" && flock -n 3; } 2>/dev/null; then
-    exec daemon syslog "$0" "${@:1:OPTIND - 1}" -
-    rm -f "$PIDFILE"
-  else
-    echo "Failed to lock $PIDFILE; is ${0##*/} already running?" >&2
-  fi
+if ! { exec 3>>"$PIDFILE" && flock -n 3; } 2>/dev/null; then
+  echo "Failed to lock $PIDFILE; is ${0##*/} already running?" >&2
   exit 1
 fi
 
-trap 'RESTART=0 && exit' SIGTERM
-trap 'RESTART=1 && exit' SIGHUP SIGINT SIGUSR1 SIGUSR2
-trap '(( RESTART )) && exec "$0" "$@" || rm -f "$PIDFILE"' EXIT
+if read -a STAT </proc/self/stat && (( $$ != STAT[5] )); then
+  exec daemon -- "$0" "$@"
+  rm -f "$PIDFILE"
+  exit 1
+fi
 
-echo $PPID >"$PIDFILE"
-exec 3>&-
+echo $$ >"$PIDFILE"
+trap 'trap - TERM && kill -TERM 0 && rm -f "$PIDFILE"' EXIT
+trap 'exec -- "$0" "$@"' HUP
+
+if [[ ! -p /dev/stdin ]]; then
+  exec < <(syslog 3>&-)
+fi
 
 while read -r PEERPID PEERUID PEERGID FACILITY LEVEL DATE TIME ENTRY; do
   classify && log

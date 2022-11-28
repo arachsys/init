@@ -132,9 +132,7 @@ mainstream competitors, more in keeping with the Unix 'toolkit' philosophy.
 
 syslog reads messages as they arrive at /dev/log and /proc/kmsg, printing
 them to stdout in a format chosen for ease of handling in a shell-script
-read loop. For convenience, if syslog is provided with arguments, it will
-run them as a command in a child process and pipe its output to this command
-instead of stdout.
+read loop.
 
 By default, syslog uses UTC timestamps. Each line of output consists of
 eight space-separated fields:

@@ -98,6 +98,6 @@ while read -r KEY VALUE; do
     add | change | move | offline | online | overflow | remove)
       event $ACTION $DEVPATH && $ACTION $DEVPATH
       ;;
-  esac
+  esac </dev/null 3>&-
   ENV=()
 done

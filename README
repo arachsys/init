@@ -130,7 +130,7 @@ syslog and syslogd
 This little system logger daemon takes a different approach to its
 mainstream competitors, more in keeping with the Unix 'toolkit' philosophy.
 
-syslog reads messages as they arrive at /dev/log and /proc/kmsg, printing
+syslog reads messages as they arrive at /dev/log and /dev/kmsg, printing
 them to stdout in a format chosen for ease of handling in a shell-script
 read loop.
 

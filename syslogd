@@ -3,6 +3,7 @@
 CONFFILE=/etc/syslogd.conf
 DATASYNC=0
 LOGDIR=/var/log
+OPTIONS=()
 PIDFILE=/run/syslogd.pid
 RESTART=0
 
@@ -25,8 +26,25 @@ log() {
   (( DATASYNC )) && sync -d "$LOGDIR/$FACILITY/$DATE"
 }
 
-while getopts :d:f:kp:s OPTION; do
+usage() {
+  cat >&2 <<EOF
+Usage: ${0##*/} [OPTIONS]
+Options:
+  -b            catch up with old kernel messages in the ring buffer
+  -d LOGDIR     set the root log directory, /var/log by default
+  -f CONFFILE   set the configuration file, /etc/syslogd.conf by default
+  -k            relay syslog messages to the kernel ring buffer
+  -p PIDFILE    set the pidfile location, /run/syslogd.pid by default
+  -s            sync log files to disk after writing each entry
+EOF
+  exit 64
+}
+
+while getopts :bd:f:kp:s OPTION; do
   case $OPTION in
+    b)
+      OPTIONS+=('-b')
+      ;;
     d)
       LOGDIR=$OPTARG
       ;;
@@ -36,8 +54,9 @@ while getopts :d:f:kp:s OPTION; do
     k)
       classify() (( PEERPID ))
       log() {
-        printf '<%d>%s\n' $((LEVEL + 24)) "$ENTRY" >>/dev/kmsg
+        printf '<%d>%s\n' $((FACILITY + LEVEL)) "$ENTRY" >>/dev/kmsg
       }
+      OPTIONS+=('-n')
       ;;
     p)
       PIDFILE=$OPTARG
@@ -45,8 +64,13 @@ while getopts :d:f:kp:s OPTION; do
     s)
       DATASYNC=1
       ;;
+    *)
+      usage
+      ;;
   esac
 done
+
+(( OPTIND <= $# )) && usage
 
 if [[ -f $CONFFILE ]] && ! source "$CONFFILE"; then
   exit 1
@@ -68,7 +92,7 @@ trap 'trap - TERM && kill -TERM 0 && rm -f "$PIDFILE"' EXIT
 trap 'exec -- "$0" "$@"' HUP
 
 if [[ ! -p /dev/stdin ]]; then
-  exec < <(syslog 3>&-)
+  exec < <(syslog "${OPTIONS[@]}" 3>&-)
 fi
 
 while read -r PEERPID PEERUID PEERGID FACILITY LEVEL DATE TIME ENTRY; do

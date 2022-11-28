@@ -8,6 +8,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sysexits.h>
 #include <syslog.h>
 #include <time.h>
 #include <unistd.h>
@@ -28,6 +29,7 @@
 #endif
 
 static char buffer[BUFFER + 1], *zone;
+static int boot = 0, numeric = 0;
 
 static int syslog_date(char *line, struct tm *date) {
   char *cursor;
@@ -126,18 +128,19 @@ static void syslog_recv(int fd) {
     cursor += syslog_date(cursor, &date);
 
     if (*cursor) {
-      if (zone && zone[0])
-        printf("%u %u %u %s %u %04u-%02u-%02u %02u:%02u:%02u%c%02u%02u %s\n",
-          id.pid, id.uid, id.gid, syslog_facility(priority),
-          priority & LOG_PRIMASK, date.tm_year + 1900, date.tm_mon + 1,
-          date.tm_mday, date.tm_hour, date.tm_min, date.tm_sec,
-          date.tm_gmtoff < 0 ? '-' : '+', abs((int) date.tm_gmtoff) / 3600,
-          abs((int) date.tm_gmtoff) / 60 % 60, cursor);
+      printf("%u %u %u", id.pid, id.uid, id.gid);
+      if (numeric)
+        printf(" %u", priority & LOG_FACMASK);
       else
-        printf("%u %u %u %s %u %04u-%02u-%02u %02u:%02u:%02u %s\n", id.pid,
-          id.uid, id.gid, syslog_facility(priority), priority & LOG_PRIMASK,
-          date.tm_year + 1900, date.tm_mon + 1, date.tm_mday, date.tm_hour,
-          date.tm_min, date.tm_sec, cursor);
+        printf(" %s", syslog_facility(priority));
+      printf(" %u %04u-%02u-%02u %02u:%02u:%02u", priority & LOG_PRIMASK,
+        date.tm_year + 1900, date.tm_mon + 1, date.tm_mday, date.tm_hour,
+        date.tm_min, date.tm_sec);
+      if (zone && zone[0])
+        printf("%c%02u%02u", date.tm_gmtoff < 0 ? '-' : '+',
+          abs((int) date.tm_gmtoff) / 3600,
+          abs((int) date.tm_gmtoff) / 60 % 60);
+      printf(" %s\n", cursor);
     }
     cursor += strlen(cursor) + 1;
   }
@@ -171,27 +174,54 @@ static void kernel_read(int fd) {
   cursor = cursor ? cursor + 1 : buffer;
 
   if (*cursor) {
-    if (zone && zone[0])
-      printf("0 0 0 %s %u %04u-%02u-%02u %02u:%02u:%02u%c%02u%02u %s\n",
-        syslog_facility(priority), priority & LOG_PRIMASK,
-        date.tm_year + 1900, date.tm_mon + 1, date.tm_mday, date.tm_hour,
-        date.tm_min, date.tm_sec, date.tm_gmtoff < 0 ? '-' : '+',
-        abs((int) date.tm_gmtoff) / 3600,
-        abs((int) date.tm_gmtoff) / 60 % 60, cursor);
+    if (numeric)
+      printf("0 0 0 %u", priority & LOG_FACMASK);
     else
-      printf("0 0 0 %s %u %04u-%02u-%02u %02u:%02u:%02u %s\n",
-        syslog_facility(priority), priority & LOG_PRIMASK,
-        date.tm_year + 1900, date.tm_mon + 1, date.tm_mday, date.tm_hour,
-        date.tm_min, date.tm_sec, cursor);
+      printf("0 0 0 %s", syslog_facility(priority));
+    printf(" %u %04u-%02u-%02u %02u:%02u:%02u", priority & LOG_PRIMASK,
+      date.tm_year + 1900, date.tm_mon + 1, date.tm_mday, date.tm_hour,
+      date.tm_min, date.tm_sec);
+    if (zone && zone[0])
+      printf("%c%02u%02u", date.tm_gmtoff < 0 ? '-' : '+',
+        abs((int) date.tm_gmtoff) / 3600,
+        abs((int) date.tm_gmtoff) / 60 % 60);
+    printf(" %s\n", cursor);
     fflush(stdout);
   }
 }
 
+void usage(char *progname) {
+  fprintf(stderr, "\
+Usage: %s [OPTIONS]\n\
+Options:\n\
+  -b  include old messages from the kernel ring buffer\n\
+  -n  print facility numbers instead of names\n\
+", progname);
+  exit(EX_USAGE);
+}
+
 int main(int argc, char **argv) {
   struct pollfd fds[2];
+  int option;
+
+  while ((option = getopt(argc, argv, ":bn")) > 0)
+    switch (option) {
+      case 'b':
+        boot = 1;
+        break;
+      case 'n':
+        numeric = 1;
+        break;
+      default:
+        usage(argv[0]);
+    }
+
+  if (argc > optind)
+    usage(argv[0]);
 
   if ((fds[0].fd = open("/dev/kmsg", O_RDONLY | O_NONBLOCK)) < 0)
     err(EXIT_FAILURE, "open /dev/kmsg");
+  lseek(fds[0].fd, 0, boot ? SEEK_SET : SEEK_END);
   fds[1].fd = syslog_open();
 
   zone = getenv("TZ");

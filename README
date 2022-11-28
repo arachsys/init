@@ -151,6 +151,11 @@ the zone offset in the format +HHMM or -HHMM is appended to the time field.
 This resolves any ambiguity with times during daylight saving changes. To
 stamp log entries with the default local zone, run with TZ=:/etc/localtime.
 
+When run with the -b option, syslog also prints old messages in the kernel
+ring buffer. This is useful for capturing kernel boot messages at system
+startup. With the -n option, the output format includes numeric facilities
+instead of names.
+
 On glibc systems, syslog(3) sends datagrams to /dev/log with dates in the
 time zone of the calling process. On musl systems, these time stamps are
 always UTC. The right behaviour should be chosen automatically but can be

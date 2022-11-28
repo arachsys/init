@@ -168,9 +168,7 @@ The kernel notifies userspace of device creation with uevents sent to
 clients listening on a NETLINK_KOBJECT_UEVENT sockets. As they arrive,
 uevent lists the uevent properties to stdout in a space-separated key/value
 format with a blank line terminating the record. This format is chosen for
-easy of handling in a shell-script read loop.  For convenience, if uevent is
-provided with arguments, it will run them as a command in a child process
-and pipe its output to this command instead of stdout.
+easy of handling in a shell-script read loop.
 
 An example uevent property list for a newly created disk device is
 

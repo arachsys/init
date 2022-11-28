@@ -3,6 +3,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sysexits.h>
 #include <unistd.h>
 #include <asm/types.h>
 #include <linux/netlink.h>
@@ -10,15 +11,102 @@
 
 #define BUFFER 4096
 
+static struct sockaddr_nl netlink = { .nl_family = AF_NETLINK };
+
+static int broadcast(void) {
+  char *action = NULL, *devpath = NULL, *event = NULL, *line;
+  size_t count, length = 0, size = 0;
+  int sock, socksize = 1 << 21;
+
+  if ((sock = socket(PF_NETLINK, SOCK_DGRAM, NETLINK_KOBJECT_UEVENT)) < 0)
+    err(EXIT_FAILURE, "socket");
+
+  setsockopt(sock, SOL_SOCKET, SO_SNDBUF, &socksize, sizeof(int));
+  setsockopt(sock, SOL_SOCKET, SO_SNDBUFFORCE, &socksize, sizeof(int));
+
+  if (connect(sock, (struct sockaddr *) &netlink, sizeof(netlink)) < 0)
+    err(EXIT_FAILURE, "connect");
+
+  while (line = fgetln(stdin, &count), line || length) {
+    if (line && count && line[count - 1] == '\n')
+      count--;
+
+    if (line && count) {
+      /* Append property line and null-terminate it. */
+      while (size < length + count + 1)
+        if (event = realloc(event, size += 4096), event == NULL)
+          err(EXIT_FAILURE, "realloc");
+      memcpy(event + length, line, count);
+      event[length + count] = 0;
+
+      /* Support both KEY VALUE and KEY=VALUE input lines. */
+      for (size_t i = length; i < length + count; i++)
+        if (event[i] == ' ' || event[i] == '=') {
+          event[i] = '=';
+          break;
+        }
+
+      /* Keep track of ACTION and DEVPATH for constructing header. */
+      if (strncmp(event + length, "ACTION=", strlen("ACTION=")) == 0)
+        action = event + length + strlen("ACTION=");
+      if (strncmp(event + length, "DEVPATH=", strlen("DEVPATH=")) == 0)
+        devpath = event + length + strlen("DEVPATH=");
+
+      length += count + 1;
+      continue;
+    }
+
+    if (action && devpath) {
+      /* Make space for the ACTION@DEVPATH header then prepend it. */
+      count = 2 + strlen(action) + strlen(devpath);
+
+      while (size < length + count)
+        if (event = realloc(event, size += 4096), event == NULL)
+          err(EXIT_FAILURE, "realloc");
+
+      memmove(event + count, event, length);
+      snprintf(event, count, "%s@%s", action + count, devpath + count);
+
+      /* Attempt to broadcast uevent but tolerate failures. */
+      while (send(sock, event, length + count, 0) < 0)
+        if (errno != EAGAIN && errno != EINTR)
+          break;
+    }
+    action = devpath = NULL, length = 0;
+  }
+
+  close(sock);
+  return ferror(stdin) ? EXIT_FAILURE : EXIT_SUCCESS;
+}
+
+void usage(char *progname) {
+  fprintf(stderr, "\
+Usage:\n\
+  %1$s -l GROUPS  listen for uevents, printing them to stdout\n\
+  %1$s -b GROUPS  read uevents from stdin and broadcast them\n\
+", progname);
+  exit(EX_USAGE);
+}
+
 int main(int argc, char **argv) {
   char buffer[BUFFER + 1], *cursor, *separator;
   int sock, socksize = 1 << 21;
   ssize_t length;
 
-  struct sockaddr_nl addr = {
-    .nl_family = AF_NETLINK,
-    .nl_groups = 1
-  };
+  if (argc == 3 && strcmp(argv[1], "-b") == 0) {
+    netlink.nl_groups = strtoul(argv[2], NULL, 0);
+    if (netlink.nl_groups == 0)
+      errx(EXIT_FAILURE, "Invalid netlink group mask: %s", argv[2]);
+    return broadcast();
+  }
+
+  if (argc == 3 && strcmp(argv[1], "-l") == 0) {
+    netlink.nl_groups = strtoul(argv[2], NULL, 0);
+    if (netlink.nl_groups == 0)
+      errx(EXIT_FAILURE, "Invalid netlink group mask: %s", argv[2]);
+  } else {
+    usage(argv[0]);
+  }
 
   if ((sock = socket(PF_NETLINK, SOCK_DGRAM, NETLINK_KOBJECT_UEVENT)) < 0)
     err(EXIT_FAILURE, "socket");
@@ -26,7 +114,7 @@ int main(int argc, char **argv) {
   setsockopt(sock, SOL_SOCKET, SO_RCVBUF, &socksize, sizeof(int));
   setsockopt(sock, SOL_SOCKET, SO_RCVBUFFORCE, &socksize, sizeof(int));
 
-  if (bind(sock, (struct sockaddr *) &addr, sizeof(addr)) < 0)
+  if (bind(sock, (struct sockaddr *) &netlink, sizeof(netlink)) < 0)
     err(EXIT_FAILURE, "bind");
 
   while (1) {
@@ -65,6 +153,4 @@ int main(int argc, char **argv) {
     putchar('\n');
     fflush(stdout);
   }
-
-  return EXIT_FAILURE;
 }

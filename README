@@ -166,9 +166,9 @@ uevent and ueventd
 
 The kernel notifies userspace of device creation with uevents sent to
 clients listening on a NETLINK_KOBJECT_UEVENT sockets. As they arrive,
-uevent lists the uevent properties to stdout in a space-separated key/value
-format with a blank line terminating the record. This format is chosen for
-easy of handling in a shell-script read loop.
+'uevent -l 1' lists the uevent properties to stdout in a space-separated
+key/value format with a blank line terminating the record. This format is
+chosen for easy of handling in a shell-script read loop.
 
 An example uevent property list for a newly created disk device is
 
@@ -199,6 +199,13 @@ together with the most commonly accessed properties in the shell variables
 ACTION, DEVNAME, DEVPATH, DRIVER, INTERFACE and SUBSYSTEM. SYSPATH is also
 set to the absolute path of the device directory, i.e. ${SYSFS}${DEVPATH}
 where $SYSFS is typically /sys.
+
+More generally, uevent can listen on any combination of netlink groups,
+specified as a mask argument in 'uevent -l GROUPS'. The kernel reports
+uevents on group 1, but groups 2, 4, 8, ... are available for userspace.
+
+Run as 'uevent -b GROUPS', uevent will instead read key/value properties
+from stdin, terminated by a blank line, and broadcast them via netlink.
 
 
 Building and installing

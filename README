@@ -189,9 +189,16 @@ DEVNAME (if set) is the path of the kernel-created device node in devtmpfs.
 Network interfaces will instead have an INTERFACE property with their name
 that was allocated by the kernel.
 
+More generally, uevent can listen on any combination of netlink groups,
+specified as a mask argument in 'uevent -l GROUPS'. The kernel reports
+uevents on group 1, but groups 2, 4, 8, ... are available for userspace.
+
+Run as 'uevent -b GROUPS', uevent will instead read key/value properties
+from stdin, terminated by a blank line, and broadcast them via netlink.
+
 A simple ueventd script to handle uevent output is installed with it, as
 cleaner, more flexible replacement for udev. To use this, define bash
-functions add(), remove(), change(), etc. (matching the uevent ACTION types)
+functions add(), remove(), change(), etc. (matching the event ACTION types)
 in /etc/ueventd.conf, which is sourced by the script on start. The event()
 shell function is also called for all events, with the ACTION and DEVPATH in
 its first two arguments.
@@ -203,12 +210,10 @@ ACTION, DEVNAME, DEVPATH, DRIVER, INTERFACE and SUBSYSTEM. SYSPATH is also
 set to the absolute path of the device directory, i.e. ${SYSFS}${DEVPATH}
 where $SYSFS is typically /sys.
 
-More generally, uevent can listen on any combination of netlink groups,
-specified as a mask argument in 'uevent -l GROUPS'. The kernel reports
-uevents on group 1, but groups 2, 4, 8, ... are available for userspace.
-
-Run as 'uevent -b GROUPS', uevent will instead read key/value properties
-from stdin, terminated by a blank line, and broadcast them via netlink.
+To rebroadcast filtered events to userspace, such as programs linked against
+libudev-zero, run ueventd with the -b option and adjust ENV as required in
+the handler functions. To completely suppress an event, unset ENV or return
+with non-zero status.
 
 
 Building and installing

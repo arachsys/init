@@ -15,7 +15,7 @@ int main(int argc, char **argv) {
     return 64;
   }
 
-  if (argc > 2 && strcmp(argv[1], argv[2]) != 0) {
+  if (argc > 2) {
     if (syscall(__NR_pivot_root, argv[1], argv[2]) < 0)
       err(EXIT_FAILURE, "cannot pivot to new root %s", argv[1]);
     return EXIT_SUCCESS;
@@ -34,8 +34,6 @@ int main(int argc, char **argv) {
     err(EXIT_FAILURE, "cannot disable old root mount propagation");
   if (umount2(".", MNT_DETACH) < 0)
     err(EXIT_FAILURE, "cannot detach old root");
-  if (fchdir(new) < 0)
-    err(EXIT_FAILURE, "cannot re-enter new root");
 
   return EXIT_SUCCESS;
 }

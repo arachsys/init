@@ -1,6 +1,6 @@
 /dev/vda / ext4 discard,relatime 1 1
 devtmpfs /dev devtmpfs mode=0755 0 0
-devpts /dev/pts devpts newinstance 0 0
+devpts /dev/pts devpts newinstance,ptmxmode=0666 0 0
 proc /proc proc defaults 0 0
 tmpfs /run tmpfs mode=0755 0 0
 sysfs /sys sysfs defaults 0 0

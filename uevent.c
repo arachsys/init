@@ -14,9 +14,10 @@
 static struct sockaddr_nl netlink = { .nl_family = AF_NETLINK };
 
 static int broadcast(void) {
-  char *action = NULL, *devpath = NULL, *event = NULL, *line;
-  size_t count, length = 0, size = 0;
+  char *action = NULL, *devpath = NULL, *event = NULL, *line = NULL;
+  size_t length = 0, linesize = 0, size = 0;
   int sock, socksize = 1 << 21;
+  ssize_t count;
 
   if ((sock = socket(PF_NETLINK, SOCK_DGRAM, NETLINK_KOBJECT_UEVENT)) < 0)
     err(EXIT_FAILURE, "socket");
@@ -27,11 +28,11 @@ static int broadcast(void) {
   if (connect(sock, (struct sockaddr *) &netlink, sizeof(netlink)) < 0)
     err(EXIT_FAILURE, "connect");
 
-  while (line = fgetln(stdin, &count), line || length) {
-    if (line && count && line[count - 1] == '\n')
+  while ((count = getline(&line, &linesize, stdin)) > 0 || length) {
+    if (line && count > 0 && line[count - 1] == '\n')
       count--;
 
-    if (line && count) {
+    if (line && count > 0) {
       /* Append property line and null-terminate it. */
       while (size < length + count + 1)
         if (event = realloc(event, size += 4096), event == NULL)
@@ -75,6 +76,7 @@ static int broadcast(void) {
     action = devpath = NULL, length = 0;
   }
 
+  free(line);
   close(sock);
   return ferror(stdin) ? EXIT_FAILURE : EXIT_SUCCESS;
 }

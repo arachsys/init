@@ -290,8 +290,9 @@ static void pidfile_open(const char *path) {
     errx(EXIT_FAILURE, "%s already locked", path);
   if (!(pidfile.path = realpath(path, NULL)))
     err(EXIT_FAILURE, "%s", path);
+  if (ftruncate(pidfile.fd, 0) < 0)
+    err(EXIT_FAILURE, "%s", path);
   atexit(pidfile_close);
-  ftruncate(pidfile.fd, 0);
 }
 
 static void pidfile_write(void) {
@@ -560,7 +561,8 @@ int main(int argc, char **argv) {
           err(EXIT_FAILURE, "strdup");
         await(path, inotify, 0);
         free(path);
-        fchdir(pwd);
+        if (fchdir(pwd) < 0)
+          err(EXIT_FAILURE, "fchdir");
       }
 
     close(inotify);

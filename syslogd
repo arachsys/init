@@ -1,11 +1,11 @@
 #!/bin/bash
 
 CONFFILE=/etc/syslogd.conf
-DATASYNC=0
 LOGDIR=/var/log
 OPTIONS=()
 PIDFILE=/run/syslogd.pid
 RESTART=0
+SYNC=0
 
 classify() {
   if (( LEVEL > 6 )); then
@@ -23,7 +23,7 @@ log() {
     mkdir -m 0700 -p "$LOGDIR/$FACILITY"
   fi
   printf '%s %s\n' "$TIME" "$ENTRY" >>"$LOGDIR/$FACILITY/$DATE"
-  (( DATASYNC )) && sync -d "$LOGDIR/$FACILITY/$DATE"
+  (( SYNC )) && sync "$LOGDIR/$FACILITY/$DATE"
 }
 
 usage() {
@@ -62,7 +62,7 @@ while getopts :bd:f:kp:s OPTION; do
       PIDFILE=$OPTARG
       ;;
     s)
-      DATASYNC=1
+      SYNC=1
       ;;
     *)
       usage

@@ -50,27 +50,12 @@ start() {
 
   syslogd -k
   ssh-keygen -A && $(type -P sshd)
-}
 
-listen() {
-  if [[ ! -p /dev/initctl ]]; then
-    rm -f /dev/initctl
-    mkfifo -m 0600 /dev/initctl
-  fi
+  trap 'exec "$0" stop reboot' INT
+  trap 'exec "$0" stop poweroff' TERM
 
-  trap "printf '\0reboot\0' >/dev/initctl" INT
   ctrlaltdel soft
-
-  while read -d '' -r MESSAGE; do
-    case "$MESSAGE" in
-      halt | poweroff | reboot)
-        exec "$0" stop "$MESSAGE"
-        ;;
-      run\ *)
-        eval "${MESSAGE#run }"
-        ;;
-    esac
-  done <>/dev/initctl
+  while true; do read; done <><(:)
 }
 
 stop() {
@@ -83,5 +68,4 @@ stop() {
   exec stop "$@"
 }
 
-trap listen EXIT
 "${@:-start}"

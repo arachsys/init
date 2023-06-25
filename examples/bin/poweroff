@@ -1,2 +1,2 @@
 #!/bin/sh
-printf '\0poweroff\0' >/dev/initctl
+kill -TERM 1

@@ -52,7 +52,7 @@ named pipe.
 
 A demonstration /etc/init is included in the examples/ subdirectory, along
 with an example /etc/fstab showing the required pseudo-filesystems and
-one-line scripts to trigger halt, poweroff and reboot actions.
+one-line scripts to trigger poweroff and reboot actions.
 
 Sometimes a completely null init can be useful, such as for PID 1 in a PID
 namespace. The reap utility is intended to fill this role: it does nothing

@@ -34,7 +34,7 @@ start() {
   mount -o remount,rw /
   mount -a -t nonfs
 
-  if [[ -c /dev/watchdog ]] && exec >/dev/watchdog; then
+  if [[ -c /dev/watchdog ]] && exec >/dev/watchdog && wait; then
     trap 'printf V && exit' TERM
     while printf '\0'; do read -t 15; done
   fi <><(:) & disown

@@ -29,6 +29,11 @@ A simple subset of traditional inetd or tcpserver functionality is also
 available: daemon can listen on TCP or unix stream sockets and run the
 specified command as a handler for each inbound connection.
 
+Note that the daemon process is intentionally run as a session and process
+group leader. On Linux, a session leader without a controlling terminal can
+acquire one just by opening a terminal device. Pass the -f flag to disable
+this behaviour: daemon will fork twice so it no longer leads the session.
+
 
 init and reap
 -------------

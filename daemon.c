@@ -433,6 +433,7 @@ static void usage(char *progname) {
 Usage: %s [OPTIONS] CMD [ARG]...\n\
 Options:\n\
   -d DIR        change directory to DIR before running the command\n\
+  -f            fork twice so the command is not a session leader\n\
   -l TAG:PRI    redirect stdout and stderr to a logger subprocess,\n\
                   using syslog tag TAG and priority/facility PRI\n\
   -l LOGFILE    append stdout and stderr to a file LOGFILE, which must be\n\
@@ -455,7 +456,7 @@ Options:\n\
 int main(int argc, char **argv) {
   char *dir = NULL, *options, *path;
   int fd, inotify, option, pwd, tail, waitargs;
-  size_t limit = -1, restart = 0;
+  size_t doublefork = 0, limit = -1, restart = 0;
   struct passwd *user;
 
   /* Redirect stdin from /dev/null. */
@@ -489,7 +490,7 @@ int main(int argc, char **argv) {
         close(fd);
         break;
       case 'f':
-        /* On by default; ignored for compatibility with BSD daemon(1). */
+        doublefork = 1;
         break;
       case 'l':
         logger_setup(optarg);
@@ -531,6 +532,7 @@ int main(int argc, char **argv) {
   if (argc <= optind)
     usage(argv[0]);
 
+  /* Fork into the background then create a session and process group. */
   switch (fork()) {
     case -1:
       err(EXIT_FAILURE, "fork");
@@ -539,6 +541,18 @@ int main(int argc, char **argv) {
       break;
     default:
       _exit(EXIT_SUCCESS); /* Don't delete pidfile in atexit() handler. */
+  }
+
+  if (doublefork) {
+    /* Fork again to ensure we are not the session leader. */
+    switch (fork()) {
+      case -1:
+        err(EXIT_FAILURE, "fork");
+      case 0:
+        break;
+      default:
+        _exit(EXIT_SUCCESS); /* Don't delete pidfile in atexit() handler. */
+    }
   }
 
   logger_start();

@@ -461,20 +461,19 @@ int main(int argc, char **argv) {
   /* Redirect stdin from /dev/null. */
   if ((fd = open("/dev/null", O_RDWR)) < 0)
     err(EXIT_FAILURE, "open /dev/null");
-  if (fd != STDIN_FILENO)
+  if (fd != STDIN_FILENO) {
     if ((dup2(fd, STDIN_FILENO)) < 0)
       err(EXIT_FAILURE, "dup2");
+    close(fd);
+  }
 
   /* Redirect stdout and/or stderr to /dev/null if closed. */
-  while (fd <= STDERR_FILENO)
-    if ((fd = dup(fd)) < 0)
-      err(EXIT_FAILURE, "dup");
-  close(fd);
-
-  /* Close all file descriptors apart from stdin, stdout and stderr. */
-  fd = getdtablesize() - 1;
-  while (fd > STDERR_FILENO)
-    close(fd--);
+  if (fcntl(STDOUT_FILENO, F_GETFD) < 0 && errno == EBADF)
+    if ((dup2(STDIN_FILENO, STDOUT_FILENO)) < 0)
+      err(EXIT_FAILURE, "dup2");
+  if (fcntl(STDERR_FILENO, F_GETFD) < 0 && errno == EBADF)
+    if ((dup2(STDIN_FILENO, STDERR_FILENO)) < 0)
+      err(EXIT_FAILURE, "dup2");
 
   options = "+:cd:fl:n:p:rs:t:u:w:", waitargs = 0;
   while ((option = getopt(argc, argv, options)) > 0)

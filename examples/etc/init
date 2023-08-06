@@ -6,15 +6,12 @@ export PATH=/bin
 start() {
   hostname example
 
-  mount -a -n -t proc
-  mount -a -n -t cgroup2,devtmpfs,sysfs,tmpfs
-  mkdir -m 0755 -p /dev/pts /run/empty
+  mount -a -t proc
+  mount -a -m -t cgroup2,devpts,devtmpfs,sysfs,tmpfs
+  mount -m -r -B /run/empty /run/empty
   mkdir -m 1777 -p /run/lock /run/shm
-  mount -r -B /run/empty /run/empty
 
-  mount -a -n -t devpts
   ln -f -n -s pts/ptmx /dev/ptmx
-
   ln -f -n -s /proc/self/fd /dev/fd
   ln -f -n -s fd/0 /dev/stdin
   ln -f -n -s fd/1 /dev/stdout
@@ -39,9 +36,10 @@ start() {
     while printf '\0'; do read -t 15; done
   fi <><(:) & disown
 
-  for TTY in /dev/tty[1-6]; do
-    daemon -c -r agetty ${TTY#/dev/}
-  done
+  dmesg --console-off
+  while read TTY _; do
+    daemon -c -r agetty $TTY
+  done < /proc/consoles
 
   ip link set lo up
   ip link set eth0 up
@@ -59,7 +57,7 @@ start() {
 }
 
 stop() {
-  kill -TERM -1 && sleep 5 && kill -KILL -1
+  kill -TERM -1 && sleep 2 && kill -KILL -1
   if swapoff -a && umount -a -r; then
     echo "Remounted filesystems read-only"
   else

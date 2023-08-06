@@ -68,7 +68,7 @@ if read -a STAT </proc/self/stat && (( $$ != STAT[5] )); then
 fi
 
 echo $$ >"$PIDFILE"
-trap 'trap - TERM && kill -TERM 0 && rm -f "$PIDFILE"' EXIT
+trap 'trap "" TERM && kill -TERM 0 && rm -f "$PIDFILE"' EXIT
 trap 'exec -- "$0" "$@"' HUP
 
 if [[ ! -p /dev/stdin ]]; then

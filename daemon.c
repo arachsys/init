@@ -255,6 +255,11 @@ static void logger_start(void) {
       /* Don't unintentionally keep the pwd busy in the logger process. */
       if (chdir("/") < 0)
         err(EXIT_FAILURE, "chdir");
+      /* Redirect stdout and stderr to /dev/null for the logger process. */
+      if (dup2(STDIN_FILENO, STDOUT_FILENO) < 0)
+        err(EXIT_FAILURE, "dup2");
+      if (dup2(STDIN_FILENO, STDERR_FILENO) < 0)
+        err(EXIT_FAILURE, "dup2");
       /* Run logger(1) with stdin coming from the read end of the pipe. */
       if (dup2(logpipe[0], STDIN_FILENO) < 0)
         err(EXIT_FAILURE, "dup2");

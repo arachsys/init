@@ -92,6 +92,17 @@ Despite the extra functionality, pivot is smaller than util-linux pivot_root
 and doesn't defile /bin with an ugly command name containing an underscore.
 
 
+runfg
+-----
+
+An anti-backgrounding wrapper in the style of Dan Bernstein's fghack,
+this uses the Linux-specific PR_SET_CHILD_SUBREAPER prctl to capture
+all descendants of the command it runs. It waits for them to exit before
+returning the exit status of the original command. Unlike fghack, it does
+not rely on unexpected file descriptors being left open, but as a subreaper
+it unavoidably adopts pre-existing children as well as the one it spawns.
+
+
 seal
 ----
 

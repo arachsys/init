@@ -154,6 +154,7 @@ static void listen_unix(const char *path) {
   size_t length = strlen(path);
   int fd;
 
+  /* On Linux, address.sun_path is NUL-padded not NUL-terminated. */
   if (length > sizeof(address.sun_path))
     errx(EXIT_FAILURE, "Socket path is too long to bind");
   length += offsetof(struct sockaddr_un, sun_path);

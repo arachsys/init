@@ -23,6 +23,7 @@
 
 static id_t gid, uid;
 static size_t listeners;
+static struct inotify_event *event;
 static struct pollfd *pollfd;
 static int signals[2];
 
@@ -37,10 +38,9 @@ static struct {
 } pidfile;
 
 static void await(const char *path, int inotify, int parent) {
+  struct stat test;
   char *slash;
   int watch;
-  struct inotify_event *event;
-  struct stat test;
 
   /* Take a short-cut if path already exists and is a parent dir. */
   if (parent && !chdir(path))
@@ -89,7 +89,9 @@ static void await(const char *path, int inotify, int parent) {
       err(EXIT_FAILURE, "stat %s", path);
   }
 
-  if (!(event = malloc(sizeof(*event) + PATH_MAX + 1)))
+  if (event == NULL)
+    event = malloc(sizeof(*event) + PATH_MAX + 1);
+  if (event == NULL)
     err(EXIT_FAILURE, "malloc");
 
   /* Otherwise, wait for a matching create/move-into event. */
@@ -535,6 +537,10 @@ int main(int argc, char **argv) {
         usage(argv[0]);
     }
 
+  /* When run with just -w arguments, we await paths in the foreground. */
+  if (waitargs > 0 && argc == 2 * waitargs + 1)
+    goto await;
+
   if (argc <= optind)
     usage(argv[0]);
 
@@ -564,7 +570,7 @@ int main(int argc, char **argv) {
   logger_start();
   pidfile_write();
 
-  /* We can handle all -w command line arguments now we're daemonized. */
+await:
   if (waitargs > 0) {
     if ((inotify = inotify_init1(IN_CLOEXEC)) < 0)
       err(EXIT_FAILURE, "inotify_init1");
@@ -573,7 +579,7 @@ int main(int argc, char **argv) {
     if ((pwd = open(".", O_RDONLY | O_DIRECTORY)) < 0)
       err(EXIT_FAILURE, "open pwd");
 
-    optind = 0; /* Need to reset optind to reprocess arguments. */
+    optind = 0; /* Need to reset optind to reprocess -w arguments. */
     while ((option = getopt(argc, argv, options)) > 0)
       if (option == 'w') {
         if (!(path = strdup(optarg)))
@@ -587,6 +593,10 @@ int main(int argc, char **argv) {
     close(inotify);
     close(pwd);
   }
+
+  /* Exit if we were just awaiting paths in the foreground. */
+  if (argc <= optind)
+    return EXIT_SUCCESS;
 
   if (dir && chdir(dir) < 0)
     err(EXIT_FAILURE, "chdir");

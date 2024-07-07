@@ -38,17 +38,22 @@ static struct {
 } pidfile;
 
 static void await(const char *path, int inotify, int parent) {
+  struct pollfd fd = { .fd = inotify, .events = POLLIN };
   struct stat test;
   char *slash;
   int watch;
 
   /* Take a short-cut if path already exists and is a parent dir. */
-  if (parent && !chdir(path))
-    return;
+  if (parent) {
+    if (chdir(path) >= 0)
+      return;
+    if (errno != ENOENT)
+      err(EXIT_FAILURE, "chdir %s", path);
+  }
 
   /* If leading slashes are present, chdir to the root and remove them. */
   if (*path == '/') {
-    if (chdir("/"))
+    if (chdir("/") < 0)
       err(EXIT_FAILURE, "chdir /");
     while (*path == '/')
       path++;
@@ -73,37 +78,46 @@ static void await(const char *path, int inotify, int parent) {
     return;
 
   /* Now wait for the correct leaf name to arrive in our working dir. */
-  if ((watch = inotify_add_watch(inotify, ".", IN_CREATE | IN_MOVED_TO)) < 0)
+  watch = inotify_add_watch(inotify, ".", IN_CREATE | IN_MOVED_TO);
+  if (watch < 0)
     err(EXIT_FAILURE, "inotify_add_watch");
 
-  /* Check if it already exists after setting watch to avoid a race. */
-  if (parent) {
-    if (!chdir(path))
-      goto out;
-    if (errno != ENOENT)
-      err(EXIT_FAILURE, "chdir %s", path);
-  } else {
-    if (!stat(path, &test))
-      goto out;
-    if (errno != ENOENT)
-      err(EXIT_FAILURE, "stat %s", path);
-  }
-
-  if (event == NULL)
-    event = malloc(sizeof(*event) + PATH_MAX + 1);
-  if (event == NULL)
-    err(EXIT_FAILURE, "malloc");
-
-  /* Otherwise, wait for a matching create/move-into event. */
-  while(1) {
-    if (read(inotify, event, sizeof(*event) + PATH_MAX + 1) < 0) {
-      if (errno != EAGAIN && errno != EINTR)
-        err(EXIT_FAILURE, "read");
-    } else if (!strcmp(path, event->name)) {
-      if (!parent || !chdir(path))
+  while (1) {
+    /* Check if it already exists after setting watch to avoid a race. */
+    if (parent) {
+      if (chdir(path) >= 0)
         goto out;
       if (errno != ENOENT)
         err(EXIT_FAILURE, "chdir %s", path);
+    } else {
+      if (lstat(path, &test) >= 0)
+        goto out;
+      if (errno != ENOENT)
+        err(EXIT_FAILURE, "lstat %s", path);
+    }
+
+    if (event == NULL)
+      event = malloc(sizeof(*event) + PATH_MAX + 1);
+    if (event == NULL)
+      err(EXIT_FAILURE, "malloc");
+
+    /* Otherwise, wait one second for a matching create/move-into event. */
+    while (1) {
+      while (poll(&fd, 1, 1000) < 0)
+        if (errno != EAGAIN && errno != EINTR)
+          err(EXIT_FAILURE, "poll");
+      if (fd.revents == 0)
+        break;
+
+      if (read(inotify, event, sizeof(*event) + PATH_MAX + 1) < 0) {
+        if (errno != EAGAIN && errno != EINTR)
+          err(EXIT_FAILURE, "read");
+        break;
+      }
+
+      /* Read only succeeds if it can fill the entire struct. */
+      if (!strcmp(path, event->name))
+        break;
     }
   }
 
@@ -572,7 +586,7 @@ int main(int argc, char **argv) {
 
 await:
   if (waitargs > 0) {
-    if ((inotify = inotify_init1(IN_CLOEXEC)) < 0)
+    if ((inotify = inotify_init1(IN_CLOEXEC | IN_NONBLOCK)) < 0)
       err(EXIT_FAILURE, "inotify_init1");
 
     /* Open the working directory so we can restore it after each await(). */

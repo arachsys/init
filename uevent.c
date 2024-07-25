@@ -119,6 +119,9 @@ int main(int argc, char **argv) {
   if (bind(sock, (struct sockaddr *) &netlink, sizeof(netlink)) < 0)
     err(EXIT_FAILURE, "bind");
 
+  putchar('\n');
+  fflush(stdout);
+
   while (1) {
     if ((length = recv(sock, &buffer, sizeof(buffer) - 1, 0)) < 0) {
       if (errno == ENOBUFS) {

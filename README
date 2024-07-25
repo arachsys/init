@@ -189,6 +189,10 @@ clients listening on a NETLINK_KOBJECT_UEVENT sockets. As they arrive,
 key/value format with a blank line terminating the record. This format is
 chosen for easy of handling in a shell-script read loop.
 
+On startup, once uevent is bound to the netlink socket, it emits an
+initial blank line which can be used to avoid a race in scripts which
+also scan /sys for existing devices.
+
 An example uevent property list for a newly created disk device is
 
   ACTION add

@@ -73,6 +73,7 @@ trap 'exec -- "$0" "$@"' HUP
 
 if [[ ! -p /dev/stdin ]]; then
   exec < <(uevent -l 1 </dev/null 3>&-)
+  read -r READY
 fi
 
 if (( BROADCAST )) && [[ ! -p /dev/stdout ]]; then

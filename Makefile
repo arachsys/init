@@ -1,7 +1,7 @@
 BINDIR := $(PREFIX)/bin
 CFLAGS := -Os -Wall -Wfatal-errors
 
-SCRIPTS := syslogd ueventd
+SCRIPTS := syslogd ueventd ueventwait
 BINARIES := daemon pivot reap runfg seal stop syslog uevent
 
 %:: %.c Makefile

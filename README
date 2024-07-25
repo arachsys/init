@@ -180,8 +180,8 @@ explicitly configured at compile time with -DUTCLOG=0 or -DUTCLOG=1.
 A simple syslogd script which wraps syslog is installed with it.
 
 
-uevent and ueventd
-------------------
+uevent, ueventd and ueventwait
+------------------------------
 
 The kernel notifies userspace of device creation with uevents sent to
 clients listening on a NETLINK_KOBJECT_UEVENT sockets. As they arrive,
@@ -234,6 +234,13 @@ To rebroadcast filtered events to userspace, such as programs linked against
 libudev-zero, run ueventd with the -b option and adjust ENV as required in
 the handler functions. To completely suppress an event, unset ENV or return
 with non-zero status.
+
+The ueventwait script provides a lighter-weight mechanism to wait for
+a single device without a persistent ueventd, matching devices against
+arguments of the form KEY=PATTERN, where KEY is a property name and PATTERN
+is a bash extended-glob pattern to match against its value. It scans /sys
+to check if a matching device already exists, awaits one using a uevent
+listener if not, and reports the sysfs path of the device to stdout.
 
 
 Building and installing

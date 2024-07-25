@@ -1,0 +1,68 @@
+#!/bin/bash
+
+shopt -s extglob
+SYSFS=${SYSFS:-/sys}
+
+usage() {
+  echo "Usage: ${0##*/} KEY=PATTERN..." >&2
+  exit 64
+}
+
+if [[ $# -eq 0 ]]; then
+  usage
+fi
+
+declare -A PATTERNS=( [ACTION]=add )
+while [[ $# -gt 0 ]]; do
+  if [[ $1 == +([^=])=* ]]; then
+    PATTERNS[${1%%=*}]=${1#*=}
+  else
+    usage
+  fi
+  shift
+done
+
+exec < <(uevent -l 1 </dev/null)
+trap "kill -PIPE $! 2>/dev/null" EXIT
+read -r READY
+
+if [[ add == ${PATTERNS[ACTION]} ]]; then
+  while read -r UEVENT; do
+    declare -A ENV=( [ACTION]=add )
+
+    while IFS='=' read -r KEY VALUE; do
+      if [[ -n $KEY ]]; then
+        ENV[$KEY]=$VALUE
+      fi
+    done 2>/dev/null < "$UEVENT"
+
+    for KEY in "${!PATTERNS[@]}"; do
+      if [[ ${ENV[$KEY]} != ${PATTERNS[$KEY]} ]]; then
+        continue 2
+      fi
+    done
+
+    echo "${UEVENT%/uevent}"
+    exit 0
+  done < <(find $SYSFS/devices -name uevent -type f)
+fi
+
+declare -A ENV=()
+while read -r KEY VALUE; do
+  if [[ -n $KEY ]]; then
+    ENV[$KEY]=$VALUE
+    continue
+  fi
+
+  for KEY in "${!PATTERNS[@]}"; do
+    if [[ ${ENV[$KEY]} != ${PATTERNS[$KEY]} ]]; then
+      declare -A ENV=()
+      continue 2
+    fi
+  done
+
+  echo "$SYSFS${ENV[DEVPATH]}"
+  exit 0
+done
+
+exit 1

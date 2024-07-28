@@ -24,17 +24,16 @@ start() {
 
   mount -n -o remount,ro /
   fsck -a -A -P -T >/dev/null
-  if [[ $? -gt 1 ]]; then
-    sulogin -p /dev/console
-    sync && exec stop reboot
+  if [[ $? -le 1 ]]; then
+    mount -o remount,rw /
+    mount -a -t nonfs
   fi
-  mount -o remount,rw /
-  mount -a -t nonfs
 
   if [[ -c /dev/watchdog ]] && exec >/dev/watchdog && wait; then
     trap 'printf V && exit' TERM
     while printf '\0'; do read -t 15; done
-  fi <><(:) & disown
+  fi <><(:) &
+  disown $!
 
   dmesg --console-off
   while read TTY _; do

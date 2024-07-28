@@ -82,8 +82,14 @@ if ! { exec 3>>"$PIDFILE" && flock -n 3; } 2>/dev/null; then
 fi
 
 if read -a STAT </proc/self/stat && (( $$ != STAT[5] )); then
-  exec daemon -- "$0" "$@"
-  rm -f "$PIDFILE"
+  if exec 3>&- && daemon -- "$0" "$@"; then
+    if timeout 2 daemon -w /dev/log; then
+      exit 0
+    fi
+    echo "Background syslogd failed to start" >&2
+  else
+    rm -f "$PIDFILE"
+  fi
   exit 1
 fi
 

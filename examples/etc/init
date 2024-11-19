@@ -3,66 +3,76 @@
 set -o pipefail
 export PATH=/bin
 
-start() {
-  hostname example
+case "$1" in
+  start | "")
+    hostname example
+    ctrlaltdel soft
 
-  mount -a -t proc
-  mount -a -m -t cgroup2,devpts,devtmpfs,sysfs,tmpfs
-  mount -m -r -B /run/empty /run/empty
-  mkdir -m 1777 -p /run/lock /run/shm
+    mount -a -t proc
+    mount -a -m -t cgroup2,devpts,devtmpfs,sysfs,tmpfs
+    mount -m -r -B /run/empty /run/empty
+    mkdir -m 1777 -p /run/lock /run/shm
 
-  ln -f -n -s pts/ptmx /dev/ptmx
-  ln -f -n -s /proc/self/fd /dev/fd
-  ln -f -n -s fd/0 /dev/stdin
-  ln -f -n -s fd/1 /dev/stdout
-  ln -f -n -s fd/2 /dev/stderr
+    ln -f -n -s pts/ptmx /dev/ptmx
+    ln -f -n -s /proc/self/fd /dev/fd
+    ln -f -n -s fd/0 /dev/stdin
+    ln -f -n -s fd/1 /dev/stdout
+    ln -f -n -s fd/2 /dev/stderr
 
-  if ZRAM=$(zramctl -f -s 1G); then
-    mkswap $ZRAM >/dev/null
-    swapon -d $ZRAM
-  fi
+    if ZRAM=$(zramctl -f -s 1G); then
+      mkswap $ZRAM >/dev/null
+      swapon -d $ZRAM
+    fi
 
-  mount -n -o remount,ro /
-  fsck -a -A -P -T >/dev/null
-  if [[ $? -le 1 ]]; then
-    mount -o remount,rw /
-    mount -a -t nonfs
-  fi
+    mount -o remount,ro /
+    fsck -a -A -P -T >/dev/null
+    if [[ $? -le 1 ]]; then
+      mount -o remount,rw /
+      mount -a -t nonfs
+    fi
 
-  if [[ -c /dev/watchdog ]] && exec >/dev/watchdog && wait; then
-    trap 'printf V && exit' TERM
-    while printf '\0'; do read -t 15; done
-  fi <><(:) &
-  disown $!
+    dmesg --console-off
+    while read TTY _; do
+      daemon -c -r agetty $TTY
+    done < /proc/consoles
 
-  dmesg --console-off
-  while read TTY _; do
-    daemon -c -r agetty $TTY
-  done < /proc/consoles
+    ip link set lo up
+    ip link set eth0 up
+    ip address add 192.168.1.2/24 dev eth0
+    ip route add default via 192.168.1.1
 
-  ip link set lo up
-  ip link set eth0 up
-  ip address add 192.168.1.2/24 dev eth0
-  ip route add default via 192.168.1.1
+    syslogd -k
+    ssh-keygen -A && $(type -P sshd)
 
-  syslogd -k
-  ssh-keygen -A && $(type -P sshd)
+    daemon "$0" watchdog
+    exec "$0" reap
+    ;;
 
-  trap 'exec "$0" stop reboot' INT
-  trap 'exec "$0" stop poweroff' TERM
+  stop)
+    kill -TERM -1 && sleep 2 && kill -KILL -1
+    echo && dmesg --console-on
 
-  ctrlaltdel soft
-  while true; do read; done <><(:)
-}
+    if swapoff -a && umount -a -r; then
+      echo "Remounted filesystems read-only"
+    elif sync; then
+      echo "Flushed filesystem writes"
+    fi
 
-stop() {
-  kill -TERM -1 && sleep 2 && kill -KILL -1
-  if swapoff -a && umount -a -r; then
-    echo "Remounted filesystems read-only"
-  else
-    sync && echo "Flushed filesystem writes"
-  fi
-  exec stop "$@"
-}
+    exec stop "${@:2}"
+    ;;
 
-"${@:-start}"
+  watchdog)
+    if [[ -c /dev/watchdog ]]; then
+      exec <><(:) >/dev/watchdog && wait
+      trap 'printf V && exit' TERM
+      while printf '\0'; do read -t 15; done
+    fi
+    ;;
+
+  *)
+    trap 'exec "$0" reap 3>&-' HUP
+    trap 'exec "$0" stop reboot 3>&-' INT
+    trap 'exec "$0" stop poweroff 3>&-' TERM
+    exec 3<><(:) && while true; do read -u 3; done
+    ;;
+esac

@@ -67,6 +67,29 @@ the end of an /etc/init script if you'd prefer to avoid a long-running
 shell process as system init.
 
 
+landmask
+--------
+
+Landlock is a stackable Linux Security Module which allows processes
+to restrict their own access to the filesystem and TCP ports. These
+restrictions will also be enforced on all subsequently created children,
+and there is no way to remove or loosen the security policy once applied.
+
+landmask uses this facility to sandbox another command, masking its access
+to the filesystem and TCP networking with exceptions specified by command
+line options.
+
+The command can read paths specified with -r PATH, and both read and
+write paths specified with -w PATH. If PATH is a directory, the policy
+also applies to all paths beneath it. Any path that doesn't match one of
+these read-only or read-write rules is denied by default.
+
+In addition, the command can only listen on TCP ports given with -t PORT,
+and can only make outbound TCP connections to ports given with -T PORT.
+It cannot send signals to processes outside the sandbox, and cannot access
+abstract AF_UNIX sockets.
+
+
 pivot
 -----
 
@@ -246,12 +269,10 @@ listener if not, and reports the sysfs path of the device to stdout.
 Building and installing
 -----------------------
 
-Unpack the source tar.gz file and change to the unpacked directory.
-
-Run 'make', then 'make install' to install the scripts and binaries in /bin.
-Alternatively, you can set DESTDIR and/or BINDIR to install in a different
-location, or strip and copy the compiled binaries and scripts into the
-correct place manually.
+Run 'make install' at the top of the source tree to install the scripts
+and binaries in /bin. Alternatively, you can set DESTDIR and/or BINDIR to
+install in a different location, or strip and copy the compiled binaries
+and scripts into the correct place manually.
 
 Arachsys init was developed on GNU/Linux and is unlikely to be portable to
 other platforms as it uses a number of Linux-specific facilities. Please

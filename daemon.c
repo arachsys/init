@@ -305,7 +305,7 @@ static void pidfile_close(void) {
 }
 
 static void pidfile_open(const char *path) {
-  pidfile.fd = open(path, O_RDWR | O_CLOEXEC | O_CREAT, 0666);
+  pidfile.fd = open(path, O_RDWR | O_CREAT, 0666);
   if (pidfile.fd < 0)
     err(EXIT_FAILURE, "%s", path);
   if (flock(pidfile.fd, LOCK_EX | LOCK_NB) < 0)
@@ -398,6 +398,8 @@ static int serve(char **argv, size_t limit) {
               if (dup2(connection, STDOUT_FILENO) < 0)
                 err(EXIT_FAILURE, "dup2");
               close(connection);
+              if (pidfile.path)
+                close(pidfile.fd);
               execute(argv);
             default:
               count++;
@@ -417,7 +419,8 @@ static int supervise(char **argv, int restart) {
       case -1:
         err(EXIT_FAILURE, "fork");
       case 0:
-        setsid(); /* Ignore errors but should always work after fork. */
+        if (pidfile.path)
+          close(pidfile.fd);
         execute(argv);
     }
 
@@ -616,7 +619,7 @@ await:
     err(EXIT_FAILURE, "chdir");
 
   /* If we don't need to supervise it, just exec the command. */
-  if (!restart && !pidfile.path && !listeners)
+  if (!restart && !listeners)
     execute(argv + optind);
 
   /* Use a signals pipe to avoid async-unsafe handlers. */

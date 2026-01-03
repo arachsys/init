@@ -92,7 +92,7 @@ int main(int argc, char **argv) {
   int option, ruleset;
   char *dir = NULL;
 
-  if (prctl(PR_SET_NO_NEW_PRIVS, 1, 0, 0, 0) < 0)
+  if (prctl(PR_SET_NO_NEW_PRIVS, 1L, 0L, 0L, 0L) < 0)
     err(EXIT_FAILURE, "prctl PR_SET_NO_NEW_PRIVS");
 
   if ((ruleset = syscall(__NR_landlock_create_ruleset,

@@ -15,7 +15,7 @@ int main(int argc, char **argv) {
     return 64;
   }
 
-  if (prctl(PR_SET_CHILD_SUBREAPER, 1) < 0)
+  if (prctl(PR_SET_CHILD_SUBREAPER, 1L, 0L, 0L, 0L) < 0)
     err(EXIT_FAILURE, "prctl PR_SET_CHILD_SUBREAPER");
 
   switch (command = fork()) {

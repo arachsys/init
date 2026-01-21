@@ -2,7 +2,7 @@ BINDIR := $(PREFIX)/bin
 CFLAGS := -Os -Wall -Wfatal-errors
 
 SCRIPTS := syslogd ueventd ueventwait
-BINARIES := daemon landmask pivot reap runfg seal stop syslog uevent
+BINARIES := daemon kload landmask pivot reap runfg seal stop syslog uevent
 
 %:: %.c Makefile
 	$(CC) $(CFLAGS) -o $@ $(filter %.c,$^)

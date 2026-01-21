@@ -67,6 +67,15 @@ the end of an /etc/init script if you'd prefer to avoid a long-running
 shell process as system init.
 
 
+kload
+-----
+
+This is a command-line wrapper around kexec_file_load(), loading a new
+kernel that can be executed later using 'stop kexec' or if the system
+panics. If no kernel image, initramfs or command line is given, kload
+unloads the currently loaded kexec kernel.
+
+
 landmask
 --------
 

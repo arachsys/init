@@ -409,8 +409,8 @@ static int serve(char **argv, size_t limit) {
   }
 }
 
-static int supervise(char **argv, int restart) {
-  int signal;
+static int supervise(char **argv, int session) {
+  int restart = 1, signal;
   pid_t child, command;
   time_t wait;
 
@@ -419,7 +419,8 @@ static int supervise(char **argv, int restart) {
       case -1:
         err(EXIT_FAILURE, "fork");
       case 0:
-        setsid(); /* Ignore errors but should always work after fork. */
+        if (session)
+          setsid(); /* Ignore errors but should always work after fork. */
         if (pidfile.path)
           close(pidfile.fd);
         execute(argv);
@@ -459,7 +460,7 @@ static void usage(char *progname) {
 Usage: %s [OPTIONS] CMD [ARG]...\n\
 Options:\n\
   -d DIR        change directory to DIR before running the command\n\
-  -f            fork twice so the command is not a session leader\n\
+  -f            do not run the command as a session leader\n\
   -l TAG:PRI    redirect stdout and stderr to a logger subprocess,\n\
                   using syslog tag TAG and priority/facility PRI\n\
   -l LOGFILE    append stdout and stderr to a file LOGFILE, which must be\n\
@@ -482,7 +483,7 @@ Options:\n\
 int main(int argc, char **argv) {
   char *dir = NULL, *options, *path;
   int fd, inotify, option, pwd, tail, waitargs;
-  size_t doublefork = 0, limit = -1, restart = 0;
+  size_t limit = -1, restart = 0, session = 1;
   struct passwd *user;
 
   /* Redirect stdin from /dev/null. */
@@ -516,7 +517,7 @@ int main(int argc, char **argv) {
         close(fd);
         break;
       case 'f':
-        doublefork = 1;
+        session = 0;
         break;
       case 'l':
         logger_setup(optarg);
@@ -573,7 +574,7 @@ int main(int argc, char **argv) {
       _exit(EXIT_SUCCESS); /* Don't delete pidfile in atexit() handler. */
   }
 
-  if (doublefork) {
+  if (!session && !restart && !listeners) {
     /* Fork again to ensure we are not the session leader. */
     switch (fork()) {
       case -1:
@@ -638,5 +639,5 @@ await:
 
   if (listeners > 0)
     return serve(argv + optind, limit);
-  return supervise(argv + optind, restart);
+  return supervise(argv + optind, session);
 }

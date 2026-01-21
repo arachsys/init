@@ -7,15 +7,15 @@
 
 int main(int argc, char **argv) {
   if (argc == 2 && !strcmp(argv[1], "halt"))
-    return reboot(RB_HALT_SYSTEM);
+    return reboot(RB_HALT_SYSTEM) < 0;
   else if (argc == 2 && !strcmp(argv[1], "kexec"))
-    return reboot(RB_KEXEC);
+    return reboot(RB_KEXEC) < 0;
   else if (argc == 2 && !strcmp(argv[1], "poweroff"))
-    return fork() > 0 ? pause() : reboot(RB_POWER_OFF);
+    return fork() > 0 ? pause() : reboot(RB_POWER_OFF) < 0;
   else if (argc == 2 && !strcmp(argv[1], "reboot"))
-    return reboot(RB_AUTOBOOT);
+    return reboot(RB_AUTOBOOT) < 0;
   else if (argc == 2 && !strcmp(argv[1], "suspend"))
-    return reboot(RB_SW_SUSPEND);
+    return reboot(RB_SW_SUSPEND) < 0;
 
   fprintf(stderr, "\
 Usage: %s ACTION\n\

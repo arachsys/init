@@ -419,6 +419,7 @@ static int supervise(char **argv, int restart) {
       case -1:
         err(EXIT_FAILURE, "fork");
       case 0:
+        setsid(); /* Ignore errors but should always work after fork. */
         if (pidfile.path)
           close(pidfile.fd);
         execute(argv);

@@ -3,7 +3,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <sysexits.h>
 #include <unistd.h>
 #include <asm/types.h>
 #include <linux/netlink.h>
@@ -87,7 +86,7 @@ Usage:\n\
   %1$s -l GROUPS  listen for uevents, printing them to stdout\n\
   %1$s -b GROUPS  read uevents from stdin and broadcast them\n\
 ", progname);
-  exit(EX_USAGE);
+  exit(64);
 }
 
 int main(int argc, char **argv) {

@@ -8,7 +8,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <sysexits.h>
 #include <syslog.h>
 #include <time.h>
 #include <unistd.h>
@@ -197,7 +196,7 @@ Options:\n\
   -b  include old messages from the kernel ring buffer\n\
   -n  print facility numbers instead of names\n\
 ", progname);
-  exit(EX_USAGE);
+  exit(64);
 }
 
 int main(int argc, char **argv) {

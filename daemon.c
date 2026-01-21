@@ -10,7 +10,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <sysexits.h>
 #include <time.h>
 #include <unistd.h>
 #include <sys/file.h>
@@ -477,7 +476,7 @@ Options:\n\
   -u USERNAME   run the command with the uid and gid of user USERNAME\n\
   -w PATH       wait until PATH exists before running the command\n\
 ", progname);
-  exit(EX_USAGE);
+  exit(64);
 }
 
 int main(int argc, char **argv) {

@@ -1,7 +1,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <sysexits.h>
 #include <sys/reboot.h>
 #include <unistd.h>
 
@@ -28,5 +27,5 @@ Actions:\n\
 All actions are performed immediately without flushing buffers or a\n\
 graceful shutdown. Data may be lost on unsynced mounted filesystems.\n\
 ", argv[0]);
-  return EX_USAGE;
+  return 64;
 }

@@ -2,7 +2,8 @@ BINDIR := $(PREFIX)/bin
 CFLAGS := -Os -Wall -Wfatal-errors
 
 SCRIPTS := syslogd ueventd ueventwait
-BINARIES := daemon kload landmask pivot reap runfg seal stop syslog uevent
+BINARIES := daemon kinsert kload landmask pivot reap runfg seal stop \
+  syslog uevent
 
 %:: %.c Makefile
 	$(CC) $(CFLAGS) -o $@ $(filter %.c,$^)
@@ -13,6 +14,7 @@ install: $(SCRIPTS) $(BINARIES)
 	mkdir -p $(DESTDIR)$(BINDIR)
 	install -s $(BINARIES) $(DESTDIR)$(BINDIR)
 	install $(SCRIPTS) $(DESTDIR)$(BINDIR)
+	ln $(DESTDIR)$(BINDIR)/{kinsert,kremove}
 
 clean:
 	rm -f $(BINARIES)

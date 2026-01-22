@@ -67,17 +67,22 @@ the end of an /etc/init script if you'd prefer to avoid a long-running
 shell process as system init.
 
 
-kload
------
+kload, kinsert and kremove
+--------------------------
 
-This is a command-line wrapper around kexec_file_load(), loading a new
-kernel that can be executed later using 'stop kexec' or if the system
-panics. If no kernel image, initramfs or command line is given, kload
-unloads any pending kexec kernel that was previous loaded.
+kload is a command-line wrapper around kexec_file_load(), loading a
+new kernel that can be executed later using 'stop kexec' or if the
+system panics. If no kernel image, initramfs or command line is given,
+kload unloads any pending kexec kernel that was previous loaded.
 
 Systems which use a device tree and do not include this in the kernel
 image passed to -k will carry over the current device tree, applying any
 required fixups for the command line, initramfs, and memory layout.
+
+Similarly, kinsert and kremove are simple wrappers around finit_module()
+and delete_module() to insert and remove modules from the running kernel
+in the same way to insmod and rmmod, but avoiding the startling complexity
+of the kmod project.
 
 
 landmask

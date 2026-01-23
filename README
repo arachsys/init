@@ -75,6 +75,12 @@ new kernel that can be executed later using 'stop kexec' or if the
 system panics. If no kernel image, initramfs or command line is given,
 kload unloads any pending kexec kernel that was previous loaded.
 
+On amd64, EFI kernels can be used directly by kload, but on arm64, only
+an uncompressed image will work. An EFI zboot kernel begins with the
+eight-byte magic 4d 5a 00 00 7a 69 6d 67, followed by 32-bit little-endian
+offset and length of the compressed payload. Uncompress the payload and
+pipe to kload -k /dev/stdin to kexec a compressed EFI kernel on arm64.
+
 Systems which use a device tree and do not include this in the kernel
 image passed to -k will carry over the current device tree, applying any
 required fixups for the command line, initramfs, and memory layout.

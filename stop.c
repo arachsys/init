@@ -10,7 +10,7 @@ int main(int argc, char **argv) {
   else if (argc == 2 && !strcmp(argv[1], "kexec"))
     return reboot(RB_KEXEC) < 0;
   else if (argc == 2 && !strcmp(argv[1], "poweroff"))
-    return fork() > 0 ? pause() : reboot(RB_POWER_OFF) < 0;
+    return reboot(RB_POWER_OFF) < 0;
   else if (argc == 2 && !strcmp(argv[1], "reboot"))
     return reboot(RB_AUTOBOOT) < 0;
   else if (argc == 2 && !strcmp(argv[1], "suspend"))

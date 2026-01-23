@@ -12,8 +12,8 @@
 const int seals = F_SEAL_SEAL | F_SEAL_SHRINK | F_SEAL_GROW | F_SEAL_WRITE;
 
 int main(int argc, char **argv, char **envp) {
-  char *dir, *file, *path;
-  int src, dst;
+  char *dir, *file, *path = getenv("PATH");
+  int src = -1, dst;
   ssize_t length;
 
   if (argc < 2) {
@@ -21,13 +21,10 @@ int main(int argc, char **argv, char **envp) {
     return 64;
   }
 
-  path = getenv("PATH");
-  src = -1;
-
   if (strchr(argv[1], '/')) {
     if (access(file = argv[1], X_OK) < 0)
       err(EXIT_FAILURE, "%s", file);
-    if (src = open(file, O_RDONLY), src < 0)
+    if ((src = open(file, O_RDONLY)) < 0)
       err(EXIT_FAILURE, "open %s", file);
   }
 
@@ -37,7 +34,7 @@ int main(int argc, char **argv, char **envp) {
       err(EXIT_FAILURE, "malloc");
     if (access(file, X_OK) < 0)
       free(file);
-    else if (src = open(file, O_RDONLY), src < 0)
+    else if ((src = open(file, O_RDONLY)) < 0)
       err(EXIT_FAILURE, "open %s", file);
   }
 
@@ -46,18 +43,17 @@ int main(int argc, char **argv, char **envp) {
     err(EXIT_FAILURE, "%s", argv[1]);
   }
 
-  dst = memfd_create(file, MFD_CLOEXEC | MFD_ALLOW_SEALING);
-  if (dst < 0)
+  if ((dst = memfd_create(file, MFD_CLOEXEC | MFD_ALLOW_SEALING)) < 0)
     err(EXIT_FAILURE, "memfd_create");
 
-  while (length = sendfile(dst, src, NULL, BUFSIZ), length != 0)
+  while ((length = sendfile(dst, src, NULL, BUFSIZ)))
     if (length < 0 && errno != EAGAIN && errno != EINTR)
       err(EXIT_FAILURE, "sendfile");
   close(src);
   free(file);
 
   if (fcntl(dst, F_ADD_SEALS, seals) < 0)
-    err(1, "fcntl F_ADD_SEALS");
+    err(EXIT_FAILURE, "fcntl F_ADD_SEALS");
   fexecve(dst, argv + 1, envp);
-  err(1, "fexecve");
+  err(EXIT_FAILURE, "fexecve");
 }

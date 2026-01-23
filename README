@@ -84,6 +84,10 @@ and delete_module() to insert and remove modules from the running kernel
 in the same way to insmod and rmmod, but avoiding the startling complexity
 of the kmod project.
 
+Unlike the underlying system calls, both kload and kinsert can read from
+pipes and sockets passed using /dev/stdin or /dev/fd/N. If an unseekable
+file descriptor is provided, they will wrap it in a memfd before use.
+
 
 landmask
 --------

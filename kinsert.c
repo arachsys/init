@@ -1,12 +1,49 @@
+#define _GNU_SOURCE
 #include <err.h>
+#include <errno.h>
 #include <fcntl.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
-
 #include <linux/module.h>
+#include <sys/mman.h>
+#include <sys/stat.h>
 #include <sys/syscall.h>
+
+static int getfile(char *filename) {
+  ssize_t chunk, offset, size;
+  char buffer[BUFSIZ];
+  struct stat status;
+  int fd, memfd;
+
+  if ((fd = open(filename, O_RDONLY)) < 0)
+    err(EXIT_FAILURE, "open %s", filename);
+  if (fstat(fd, &status) >= 0 && S_ISREG(status.st_mode))
+    return fd;
+
+  if ((memfd = memfd_create(filename, 0)) < 0)
+    err(EXIT_FAILURE, "memfd_create");
+
+  while (offset = 0, size = read(fd, buffer, sizeof buffer)) {
+    if (size < 0) {
+      if (errno != EAGAIN && errno != EINTR)
+        err(EXIT_FAILURE, "read %s", filename);
+      continue;
+    }
+    while (offset < size) {
+      if ((chunk = write(memfd, buffer + offset, size - offset)) >= 0)
+        offset += chunk;
+      else if (errno != EAGAIN && errno != EINTR)
+        err(EXIT_FAILURE, "write memfd");
+    }
+  }
+
+  if (lseek(memfd, 0, SEEK_SET) < 0)
+    err(EXIT_FAILURE, "lseek");
+  close(fd);
+  return memfd;
+}
 
 static int usage(char *progname) {
   if (strstr(progname, "remove"))
@@ -17,7 +54,7 @@ static int usage(char *progname) {
 }
 
 int main(int argc, char **argv) {
-  int fd, flags = 0, force = 0, length = 0, option, status;
+  int flags = 0, force = 0, length = 0, module, option, status;
   char *params;
 
   while ((option = getopt(argc, argv, ":f")) > 0)
@@ -47,9 +84,7 @@ int main(int argc, char **argv) {
     flags |= MODULE_INIT_IGNORE_VERMAGIC;
   }
 
-  if ((fd = open(argv[optind], O_RDONLY)) < 0)
-    err(EXIT_FAILURE, "open %s", argv[optind]);
-
+  module = getfile(argv[optind]);
   for (size_t i = optind + 1; i < argc; i++)
     length += strlen(argv[i]) + 1;
   params = calloc(length ? length : 1, 1);
@@ -60,7 +95,7 @@ int main(int argc, char **argv) {
     j = stpcpy(params + j, argv[i]) - params;
   }
 
-  if (syscall(__NR_finit_module, fd, params, flags) < 0)
+  if (syscall(__NR_finit_module, module, params, flags) < 0)
     err(EXIT_FAILURE, "finit_module %s", argv[optind]);
   return EXIT_SUCCESS;
 }

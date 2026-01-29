@@ -58,7 +58,7 @@ case "$1" in
       echo "Flushed filesystem writes"
     fi
 
-    exec stop "${@:2}"
+    exec xargs -n 1 stop <<< "${*:2} reboot"
     ;;
 
   watchdog)
@@ -71,7 +71,7 @@ case "$1" in
 
   *)
     trap 'exec "$0" reap 3>&-' HUP
-    trap 'exec "$0" stop reboot 3>&-' INT
+    trap 'exec "$0" stop kexec reboot 3>&-' INT
     trap 'exec "$0" stop poweroff 3>&-' TERM
     exec 3<><(:) && while true; do read -u 3; done
     ;;

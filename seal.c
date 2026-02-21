@@ -12,8 +12,8 @@
 const int seals = F_SEAL_SEAL | F_SEAL_SHRINK | F_SEAL_GROW | F_SEAL_WRITE;
 
 int main(int argc, char **argv, char **envp) {
-  char *dir, *file, *path = getenv("PATH");
-  int src = -1, dst;
+  char *file, *path = getenv("PATH");
+  int dst, end, src = -1;
   ssize_t length;
 
   if (argc < 2) {
@@ -29,13 +29,14 @@ int main(int argc, char **argv, char **envp) {
   }
 
   while (src < 0 && path) {
-    dir = strsep(&path, ":");
-    if (asprintf(&file, "%s%s%s", dir, *dir ? "/" : "", argv[1]) < 0)
+    end = strcspn(path, ":");
+    if (asprintf(&file, "%.*s%s%s", end, path, end ? "/" : "", argv[1]) < 0)
       err(EXIT_FAILURE, "malloc");
     if (access(file, X_OK) < 0)
       free(file);
     else if ((src = open(file, O_RDONLY)) < 0)
       err(EXIT_FAILURE, "open %s", file);
+    path = path[end] ? path + end + 1 : NULL;
   }
 
   if (src < 0) {

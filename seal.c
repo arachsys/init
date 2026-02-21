@@ -51,7 +51,6 @@ int main(int argc, char **argv, char **envp) {
     if (length < 0 && errno != EAGAIN && errno != EINTR)
       err(EXIT_FAILURE, "sendfile");
   close(src);
-  free(file);
 
   if (fcntl(dst, F_ADD_SEALS, seals) < 0)
     err(EXIT_FAILURE, "fcntl F_ADD_SEALS");

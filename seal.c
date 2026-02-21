@@ -2,6 +2,7 @@
 #include <err.h>
 #include <errno.h>
 #include <fcntl.h>
+#include <paths.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -12,7 +13,7 @@
 const int seals = F_SEAL_SEAL | F_SEAL_SHRINK | F_SEAL_GROW | F_SEAL_WRITE;
 
 int main(int argc, char **argv, char **envp) {
-  char *file, *path = getenv("PATH");
+  char *file, *path = getenv("PATH") ?: _PATH_DEFPATH;
   int dst, end, src = -1;
   ssize_t length;
 

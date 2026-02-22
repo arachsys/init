@@ -392,13 +392,15 @@ static int serve(char **argv, size_t limit) {
             case -1:
               break;
             case 0:
+              if (pidfile.path) {
+                pidfile.path = NULL;
+                close(pidfile.fd);
+              }
               if (dup2(connection, STDIN_FILENO) < 0)
                 err(EXIT_FAILURE, "dup2");
               if (dup2(connection, STDOUT_FILENO) < 0)
                 err(EXIT_FAILURE, "dup2");
               close(connection);
-              if (pidfile.path)
-                close(pidfile.fd);
               execute(argv);
             default:
               count++;
@@ -418,10 +420,12 @@ static int supervise(char **argv, int session) {
       case -1:
         err(EXIT_FAILURE, "fork");
       case 0:
+        if (pidfile.path) {
+          pidfile.path = NULL;
+          close(pidfile.fd);
+        }
         if (session)
           setsid(); /* Ignore errors but should always work after fork. */
-        if (pidfile.path)
-          close(pidfile.fd);
         execute(argv);
     }
 

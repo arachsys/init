@@ -624,7 +624,7 @@ await:
     execute(argv + optind);
 
   /* Use a signals pipe to avoid async-unsafe handlers. */
-  if (pipe2(signals, O_CLOEXEC) < 0)
+  if (pipe2(signals, O_CLOEXEC | O_NONBLOCK) < 0)
     err(EXIT_FAILURE, "pipe");
 
   /* Avoid using SIG_IGN as this disposition persists across exec. */

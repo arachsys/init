@@ -36,7 +36,7 @@ static struct {
   int fd;
 } pidfile;
 
-static void await(const char *path, int inotify, int parent) {
+static void await(char *path, int inotify, int parent) {
   struct pollfd fd = { .fd = inotify, .events = POLLIN };
   struct stat test;
   char *slash;

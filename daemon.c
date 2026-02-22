@@ -136,15 +136,18 @@ static void listen_add(int fd) {
 static void listen_tcp(const char *address) {
   struct addrinfo hints = { .ai_socktype = SOCK_STREAM }, *info, *list;
   char host[256], port[32];
-  int fd, status;
+  int fd, status, tail;
 
-  if (sscanf(address, "[%255[^]]]:%31[^:]", host, port) != 2) {
-    if (sscanf(address, "%255[^:]:%31[^:]", host, port) != 2) {
-      if (sscanf(address, ":%31[^:]", port) != 1)
+  if (sscanf(address, "[%255[^]]]:%31[^:]%n", host, port, &tail) < 2) {
+    if (sscanf(address, "%255[^:]:%31[^:]%n", host, port, &tail) < 2) {
+      if (sscanf(address, ":%31[^:]%n", port, &tail) < 1)
         errx(EXIT_FAILURE, "%s: Invalid address", address);
       snprintf(host, sizeof(host), "::");
     }
   }
+
+  if (address[tail] != 0)
+    errx(EXIT_FAILURE, "%s: Invalid address", address);
 
   if ((status = getaddrinfo(host, port, &hints, &list)) != 0)
     errx(EXIT_FAILURE, "getaddrinfo: %s", gai_strerror(status));

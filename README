@@ -113,9 +113,9 @@ also applies to all paths beneath it. Any path that doesn't match one of
 these read-only or read-write rules is denied by default.
 
 In addition, the command can only listen on TCP ports given with -t PORT,
-and can only make outbound TCP connections to ports given with -T PORT.
-It cannot send signals to processes outside the sandbox, and cannot access
-abstract AF_UNIX sockets.
+and can only make outbound TCP connections to ports given with -T PORT,
+where a wildcard PORT can be specified as * or -. It cannot send signals to
+processes outside the sandbox, and cannot access abstract AF_UNIX sockets.
 
 
 pivot

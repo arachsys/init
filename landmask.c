@@ -3,6 +3,7 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include <unistd.h>
 
 #include <linux/landlock.h>
@@ -90,22 +91,36 @@ Options:\n\
 
 int main(int argc, char **argv) {
   int option, ruleset;
-  char *dir = NULL;
+  char *dir = NULL, *options;
+
+  struct landlock_ruleset_attr attr = {
+    .handled_access_fs = fs_read | fs_write,
+    .handled_access_net = LANDLOCK_ACCESS_NET_BIND_TCP
+      | LANDLOCK_ACCESS_NET_CONNECT_TCP,
+    .scoped = LANDLOCK_SCOPE_SIGNAL | LANDLOCK_SCOPE_ABSTRACT_UNIX_SOCKET
+  };
+
+  while ((option = getopt(argc, argv, options = ":d:r:w:t:T:")) > 0)
+    switch (option) {
+      case 't':
+        if (!strcmp(optarg, "*") || !strcmp(optarg, "-"))
+          attr.handled_access_net &= ~LANDLOCK_ACCESS_NET_BIND_TCP;
+        break;
+      case 'T':
+        if (!strcmp(optarg, "*") || !strcmp(optarg, "-"))
+          attr.handled_access_net &= ~LANDLOCK_ACCESS_NET_CONNECT_TCP;
+        break;
+    }
+  optind = 0;
 
   if (prctl(PR_SET_NO_NEW_PRIVS, 1L, 0L, 0L, 0L) < 0)
     err(EXIT_FAILURE, "prctl PR_SET_NO_NEW_PRIVS");
 
   if ((ruleset = syscall(__NR_landlock_create_ruleset,
-        &(struct landlock_ruleset_attr) {
-          .handled_access_fs = fs_read | fs_write,
-          .handled_access_net = LANDLOCK_ACCESS_NET_BIND_TCP
-            | LANDLOCK_ACCESS_NET_CONNECT_TCP,
-          .scoped = LANDLOCK_SCOPE_SIGNAL
-            | LANDLOCK_SCOPE_ABSTRACT_UNIX_SOCKET
-        }, sizeof(struct landlock_ruleset_attr), 0)) < 0)
+        &attr, sizeof attr, 0)) < 0)
     err(EXIT_FAILURE, "landlock_create_ruleset");
 
-  while ((option = getopt(argc, argv, ":d:r:w:t:T:")) > 0)
+  while ((option = getopt(argc, argv, options)) > 0)
     switch (option) {
       case 'd':
         dir = optarg;
@@ -116,7 +131,8 @@ int main(int argc, char **argv) {
         break;
       case 't':
       case 'T':
-        allowport(ruleset, optarg, option);
+        if (strcmp(optarg, "*") && strcmp(optarg, "-"))
+          allowport(ruleset, optarg, option);
         break;
       default:
         return usage(argv[0]);

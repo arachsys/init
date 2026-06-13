@@ -109,13 +109,16 @@ line options.
 
 The command can read paths specified with -r PATH, and both read and
 write paths specified with -w PATH. If PATH is a directory, the policy
-also applies to all paths beneath it. Any path that doesn't match one of
-these read-only or read-write rules is denied by default.
+also applies to all paths beneath it. Any path that doesn't match one
+of these read-only or read-write rules is denied by default. Accessing a
+unix socket by path requires read permission; creating a unix socket in
+the filesystem requires write permission.
 
 In addition, the command can only listen on TCP ports given with -t PORT,
 and can only make outbound TCP connections to ports given with -T PORT,
-where a wildcard PORT can be specified as * or -. It cannot send signals to
-processes outside the sandbox, and cannot access abstract AF_UNIX sockets.
+where a wildcard PORT can be specified as * or -. It cannot send signals
+to processes outside the sandbox, and cannot access abstract AF_UNIX
+sockets created outside the sandbox.
 
 
 pivot

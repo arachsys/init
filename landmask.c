@@ -20,7 +20,8 @@ const uint64_t fs_file = 0
 const uint64_t fs_read = 0
   | LANDLOCK_ACCESS_FS_EXECUTE
   | LANDLOCK_ACCESS_FS_READ_FILE
-  | LANDLOCK_ACCESS_FS_READ_DIR;
+  | LANDLOCK_ACCESS_FS_READ_DIR
+  | LANDLOCK_ACCESS_FS_RESOLVE_UNIX;
 
 const uint64_t fs_write = 0
   | LANDLOCK_ACCESS_FS_WRITE_FILE
@@ -95,9 +96,12 @@ int main(int argc, char **argv) {
 
   struct landlock_ruleset_attr attr = {
     .handled_access_fs = fs_read | fs_write,
-    .handled_access_net = LANDLOCK_ACCESS_NET_BIND_TCP
+    .handled_access_net = 0
+      | LANDLOCK_ACCESS_NET_BIND_TCP
       | LANDLOCK_ACCESS_NET_CONNECT_TCP,
-    .scoped = LANDLOCK_SCOPE_SIGNAL | LANDLOCK_SCOPE_ABSTRACT_UNIX_SOCKET
+    .scoped = 0
+      | LANDLOCK_SCOPE_ABSTRACT_UNIX_SOCKET
+      | LANDLOCK_SCOPE_SIGNAL
   };
 
   while ((option = getopt(argc, argv, options = ":d:r:w:t:T:")) > 0)
